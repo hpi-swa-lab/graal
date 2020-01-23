@@ -42,23 +42,12 @@ import java.util.concurrent.Future;
 import java.util.function.Function;
 import java.util.logging.Level;
 
-import org.graalvm.tools.lsp.server.types.CompletionContext;
-import org.graalvm.tools.lsp.server.types.CompletionList;
-import org.graalvm.tools.lsp.server.types.DocumentHighlight;
-import org.graalvm.tools.lsp.server.types.Hover;
-import org.graalvm.tools.lsp.server.types.PublishDiagnosticsParams;
-import org.graalvm.tools.lsp.server.types.SignatureHelp;
-import org.graalvm.tools.lsp.server.types.TextDocumentContentChangeEvent;
+import org.graalvm.tools.lsp.definitions.ExampleDefinition;
+import org.graalvm.tools.lsp.server.request.*;
+import org.graalvm.tools.lsp.server.types.*;
 import org.graalvm.tools.lsp.exceptions.DiagnosticsNotification;
 import org.graalvm.tools.lsp.exceptions.UnknownLanguageException;
 import org.graalvm.tools.lsp.instrument.LSPInstrument;
-import org.graalvm.tools.lsp.server.request.AbstractRequestHandler;
-import org.graalvm.tools.lsp.server.request.CompletionRequestHandler;
-import org.graalvm.tools.lsp.server.request.CoverageRequestHandler;
-import org.graalvm.tools.lsp.server.request.HighlightRequestHandler;
-import org.graalvm.tools.lsp.server.request.HoverRequestHandler;
-import org.graalvm.tools.lsp.server.request.SignatureHelpRequestHandler;
-import org.graalvm.tools.lsp.server.request.SourceCodeEvaluator;
 import org.graalvm.tools.lsp.server.utils.SourceUtils;
 import org.graalvm.tools.lsp.server.utils.TextDocumentSurrogate;
 import org.graalvm.tools.lsp.server.utils.TextDocumentSurrogateMap;
@@ -71,10 +60,6 @@ import com.oracle.truffle.api.instrumentation.TruffleInstrument;
 import com.oracle.truffle.api.instrumentation.TruffleInstrument.Env;
 import com.oracle.truffle.api.nodes.LanguageInfo;
 import com.oracle.truffle.api.source.Source;
-
-import org.graalvm.tools.lsp.server.types.CompletionOptions;
-import org.graalvm.tools.lsp.server.types.ServerCapabilities;
-import org.graalvm.tools.lsp.server.types.SignatureHelpOptions;
 
 /**
  * This class delegates LSP requests of {@link LanguageServerImpl} to specific implementations of
@@ -96,6 +81,8 @@ public final class TruffleAdapter implements VirtualLanguageServerFileProvider {
     private CoverageRequestHandler coverageHandler;
     private HighlightRequestHandler highlightHandler;
     private TextDocumentSurrogateMap surrogateMap;
+    private CodeLensRequestHandler codeLensRequestHandler;
+    private ExampleDefinitionsRequestHandler exampleDefinitionsRequestHandler;
     private final LanguageTriggerCharacters completionTriggerCharacters = new LanguageTriggerCharacters();
     private final LanguageTriggerCharacters signatureTriggerCharacters = new LanguageTriggerCharacters();
 
@@ -120,6 +107,8 @@ public final class TruffleAdapter implements VirtualLanguageServerFileProvider {
         this.signatureHelpHandler = new SignatureHelpRequestHandler(env, surrogateMap, contextAwareExecutor, sourceCodeEvaluator, completionHandler, signatureTriggerCharacters);
         this.coverageHandler = new CoverageRequestHandler(env, surrogateMap, contextAwareExecutor, sourceCodeEvaluator);
         this.highlightHandler = new HighlightRequestHandler(env, surrogateMap, contextAwareExecutor);
+        this.codeLensRequestHandler = new CodeLensRequestHandler(env, surrogateMap, contextAwareExecutor);
+        this.exampleDefinitionsRequestHandler = new ExampleDefinitionsRequestHandler(env, surrogateMap, contextAwareExecutor);
     }
 
     private void initSurrogateMap() {
@@ -162,6 +151,18 @@ public final class TruffleAdapter implements VirtualLanguageServerFileProvider {
     public Future<?> reparse(URI uri) {
         TextDocumentSurrogate surrogate = surrogateMap.get(uri);
         return contextAwareExecutor.executeWithDefaultContext(() -> parseWithEnteredContext(surrogate));
+    }
+
+    public Future<List<? extends CodeLens>> codeLens(URI uri) {
+        return contextAwareExecutor.executeWithDefaultContext(() -> codeLensRequestHandler.codeLensWithEnteredContext(uri));
+    }
+
+    public Future<List<ExampleDefinition>> exampleDefinitions(URI uri, String sourceCode) {
+        return contextAwareExecutor.executeWithDefaultContext(() -> exampleDefinitionsRequestHandler.exampleDefinitionsWithEnteredContext(uri, sourceCode));
+    }
+
+    public Future<List<ExampleDefinition>> evaluateExamplesAndProbes(URI uri, List<ExampleDefinition> examples) {
+        return contextAwareExecutor.executeWithNestedContext(() -> sourceCodeEvaluator.evaluateExamplesAndProbes(uri, examples));
     }
 
     /**

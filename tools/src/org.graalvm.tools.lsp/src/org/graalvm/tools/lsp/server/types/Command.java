@@ -83,10 +83,10 @@ public class Command {
         return Collections.unmodifiableList(list);
     }
 
-    public Command setArguments(List<Object> arguments) {
+    public Command setArguments(List<JSONObject> arguments) {
         if (arguments != null) {
             final JSONArray json = new JSONArray();
-            for (Object object : arguments) {
+            for (JSONObject object : arguments) {
                 json.put(object);
             }
             jsonData.put("arguments", json);

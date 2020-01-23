@@ -405,12 +405,19 @@ public class LanguageServer {
 
                 @Override
                 public CompletableFuture<ApplyWorkspaceEditResponse> applyEdit(ApplyWorkspaceEditParams params) {
-                    throw new UnsupportedOperationException();
+                    sendNotificationWithId("workspace/applyEdit", params.jsonData);
+                    //TODO acutally report the true edit status
+                    return CompletableFuture.completedFuture(ApplyWorkspaceEditResponse.create(true));
                 }
 
                 @Override
                 public void publishDiagnostics(PublishDiagnosticsParams params) {
                     sendNotification("textDocument/publishDiagnostics", params.jsonData);
+                }
+
+                @Override
+                public void publishDecorations(PublishDecorationsParams params) {
+                    sendNotification("custom/publishDecorations", params.jsonData);
                 }
             });
         }
@@ -852,6 +859,22 @@ public class LanguageServer {
                 String format = "[Trace - %s] Sending notification '%s'\nParams: %s";
                 server.getLogger().log(Level.FINER, String.format(format, Instant.now().toString(), method, params.toString()));
             }
+            writeMessage(notification.toString());
+        }
+
+        private static int msgID = 0;
+
+        private void sendNotificationWithId(String method, Object params) {
+            final JSONObject notification = new JSONObject();
+            notification.put("jsonrpc", "2.0");
+            notification.put("id", String.valueOf(msgID));
+            notification.put("method", method);
+            notification.put("params", params);
+            if (server.getLogger().isLoggable(Level.FINER)) {
+                String format = "[Trace - %s] Sending notification '%s'\nParams: %s";
+                server.getLogger().log(Level.FINER, String.format(format, Instant.now().toString(), method, params.toString()));
+            }
+            msgID++;
             writeMessage(notification.toString());
         }
 
