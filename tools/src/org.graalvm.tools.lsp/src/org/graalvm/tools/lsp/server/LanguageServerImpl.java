@@ -45,58 +45,26 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ThreadFactory;
 import java.util.function.Supplier;
 import java.util.logging.Level;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
+import com.oracle.truffle.api.CallTarget;
 import org.graalvm.collections.Pair;
 
-import org.graalvm.tools.lsp.server.types.CodeAction;
-import org.graalvm.tools.lsp.server.types.CodeActionParams;
-import org.graalvm.tools.lsp.server.types.CodeLens;
-import org.graalvm.tools.lsp.server.types.CodeLensOptions;
-import org.graalvm.tools.lsp.server.types.CodeLensParams;
-import org.graalvm.tools.lsp.server.types.Command;
-import org.graalvm.tools.lsp.server.types.CompletionItem;
-import org.graalvm.tools.lsp.server.types.CompletionList;
-import org.graalvm.tools.lsp.server.types.CompletionOptions;
-import org.graalvm.tools.lsp.server.types.CompletionParams;
-import org.graalvm.tools.lsp.server.types.DidChangeTextDocumentParams;
-import org.graalvm.tools.lsp.server.types.DidCloseTextDocumentParams;
-import org.graalvm.tools.lsp.server.types.DidOpenTextDocumentParams;
-import org.graalvm.tools.lsp.server.types.DidSaveTextDocumentParams;
-import org.graalvm.tools.lsp.server.types.DocumentFormattingParams;
-import org.graalvm.tools.lsp.server.types.DocumentHighlight;
-import org.graalvm.tools.lsp.server.types.DocumentOnTypeFormattingParams;
-import org.graalvm.tools.lsp.server.types.DocumentRangeFormattingParams;
-import org.graalvm.tools.lsp.server.types.DocumentSymbolParams;
-import org.graalvm.tools.lsp.server.types.ExecuteCommandOptions;
-import org.graalvm.tools.lsp.server.types.ExecuteCommandParams;
-import org.graalvm.tools.lsp.server.types.Hover;
-import org.graalvm.tools.lsp.server.types.InitializeParams;
-import org.graalvm.tools.lsp.server.types.InitializeResult;
-import org.graalvm.tools.lsp.server.types.LanguageClient;
-import org.graalvm.tools.lsp.server.types.LanguageServer;
-import org.graalvm.tools.lsp.server.types.Location;
-import org.graalvm.tools.lsp.server.types.ShowMessageParams;
-import org.graalvm.tools.lsp.server.types.MessageType;
-import org.graalvm.tools.lsp.server.types.PublishDiagnosticsParams;
-import org.graalvm.tools.lsp.server.types.Range;
-import org.graalvm.tools.lsp.server.types.ReferenceParams;
-import org.graalvm.tools.lsp.server.types.RenameParams;
-import org.graalvm.tools.lsp.server.types.ServerCapabilities;
-import org.graalvm.tools.lsp.server.types.SignatureHelp;
-import org.graalvm.tools.lsp.server.types.SignatureHelpOptions;
-import org.graalvm.tools.lsp.server.types.SymbolInformation;
-import org.graalvm.tools.lsp.server.types.TextDocumentContentChangeEvent;
-import org.graalvm.tools.lsp.server.types.TextDocumentPositionParams;
-import org.graalvm.tools.lsp.server.types.TextDocumentSyncKind;
-import org.graalvm.tools.lsp.server.types.TextEdit;
-import org.graalvm.tools.lsp.server.types.WorkspaceEdit;
-import org.graalvm.tools.lsp.server.types.WorkspaceSymbolParams;
+import org.graalvm.tools.lsp.definitions.ExampleDefinition;
+import org.graalvm.tools.lsp.definitions.ProbeDefinition;
+import org.graalvm.tools.lsp.server.types.Decoration;
+import org.graalvm.tools.lsp.server.types.PublishDecorationsParams;
+import org.graalvm.tools.lsp.server.types.*;
 import org.graalvm.tools.lsp.exceptions.DiagnosticsNotification;
 import org.graalvm.tools.lsp.exceptions.UnknownLanguageException;
 import org.graalvm.tools.lsp.instrument.LSPInstrument;
 
 import com.oracle.truffle.api.TruffleLogger;
 import com.oracle.truffle.tools.utils.json.JSONObject;
+import org.graalvm.tools.lsp.server.utils.TextDocumentSurrogate;
+
+import static java.lang.Integer.parseInt;
 
 /**
  * A LSP4J {@link LanguageServer} implementation using TCP sockets as transportation layer for the
@@ -110,6 +78,7 @@ public final class LanguageServerImpl extends LanguageServer {
     private static final String SHOW_COVERAGE = "show_coverage";
     private static final String CLEAR_COVERAGE = "clear_coverage";
     private static final String CLEAR_ALL_COVERAGE = "clear_all_coverage";
+    public static final String ADD_EXAMPLE_COMMAND = "add_example";
     private static final TextDocumentSyncKind TEXT_DOCUMENT_SYNC_KIND = TextDocumentSyncKind.Incremental;
 
     private final TruffleAdapter truffleAdapter;
@@ -117,6 +86,7 @@ public final class LanguageServerImpl extends LanguageServer {
     private final PrintWriter info;
     private LanguageClient client;
     private final Map<URI, String> openedFileUri2LangId = new HashMap<>();
+    private Map<URI, List<ExampleDefinition>> openedFileUri2Examples = new HashMap<>();
     private ExecutorService clientConnectionExecutor;
 
     private final Hover emptyHover = Hover.create(Collections.emptyList());
@@ -151,7 +121,7 @@ public final class LanguageServerImpl extends LanguageServer {
         capabilities.setSignatureHelpProvider(SignatureHelpOptions.create());
         capabilities.setHoverProvider(true);
         capabilities.setReferencesProvider(false);
-        capabilities.setExecuteCommandProvider(ExecuteCommandOptions.create(Arrays.asList(DRY_RUN, SHOW_COVERAGE, CLEAR_COVERAGE, CLEAR_ALL_COVERAGE)));
+        capabilities.setExecuteCommandProvider(ExecuteCommandOptions.create(Arrays.asList(DRY_RUN, SHOW_COVERAGE, CLEAR_COVERAGE, CLEAR_ALL_COVERAGE, ADD_EXAMPLE_COMMAND)));
 
         this.serverCapabilities = capabilities;
         CompletableFuture.runAsync(() -> parseWorkspace(params.getRootUri()));
@@ -236,7 +206,13 @@ public final class LanguageServerImpl extends LanguageServer {
 
     @Override
     public CompletableFuture<List<? extends CodeLens>> codeLens(CodeLensParams params) {
-        return CompletableFuture.supplyAsync(() -> {
+        Future<List<? extends CodeLens>> future = truffleAdapter.codeLens(URI.create(params.getTextDocument().getUri()));
+        Supplier<List<? extends CodeLens>> supplier = () -> waitForResultAndHandleExceptions(future, new ArrayList<>());
+        return CompletableFuture.supplyAsync(supplier);
+
+        //TODO reenable the old codelenses (find a way to merge the futures)
+
+/*        return CompletableFuture.supplyAsync(() -> {
             String uri = params.getTextDocument().getUri();
             if (truffleAdapter.hasCoverageData(URI.create(uri))) {
                 CodeLens codeLensShowCoverage = CodeLens.create(Range.create(0, 0, 0, 0), null);
@@ -251,10 +227,10 @@ public final class LanguageServerImpl extends LanguageServer {
                 Command commandClearAll = Command.create("Clear coverage (all files)", CLEAR_ALL_COVERAGE, uri);
                 codeLensClearAll.setCommand(commandClearAll);
 
-                return Arrays.asList(/* codeLens, */ codeLensShowCoverage, codeLensClear, codeLensClearAll);
+                return Arrays.asList(*//* codeLens, *//* codeLensShowCoverage, codeLensClear, codeLensClearAll);
             }
             return Collections.emptyList();
-        });
+        });*/
     }
 
     @Override
@@ -299,7 +275,7 @@ public final class LanguageServerImpl extends LanguageServer {
         openedFileUri2LangId.put(uri, params.getTextDocument().getLanguageId());
 
         Future<?> future = truffleAdapter.parse(params.getTextDocument().getText(), params.getTextDocument().getLanguageId(), uri);
-        CompletableFuture.runAsync(() -> waitForResultAndHandleExceptions(future, null, uri));
+        CompletableFuture.runAsync(() -> waitForResultAndHandleExceptions(future, null, uri)).thenRun(() -> extractAndEvaluateExamples(uri, params.getTextDocument().getText()));
     }
 
     @Override
@@ -316,21 +292,20 @@ public final class LanguageServerImpl extends LanguageServer {
         }
 
         URI uri = URI.create(documentUri);
-        Future<?> future;
         switch (TEXT_DOCUMENT_SYNC_KIND) {
             case Full:
                 // Only need the first element, as long as sync mode isTextDocumentSyncKind.Full
                 TextDocumentContentChangeEvent e = list.iterator().next();
-                future = truffleAdapter.parse(e.getText(), langId, uri);
+                Future<CallTarget> callTargetFuture = truffleAdapter.parse(e.getText(), langId, uri);
+                CompletableFuture.runAsync(() -> waitForResultAndHandleExceptions(callTargetFuture, null, uri)).thenRun(() -> extractAndEvaluateExamples(uri, e.getText()));
                 break;
             case Incremental:
-                future = truffleAdapter.processChangesAndParse(list, uri);
+                Future<TextDocumentSurrogate> surrogateFuture = truffleAdapter.processChangesAndParse(list, uri);
+                CompletableFuture.supplyAsync(() -> waitForResultAndHandleExceptions(surrogateFuture, null, uri)).thenAccept(surr -> extractAndEvaluateExamples(uri, surr.getEditorText()));
                 break;
             default:
                 throw new IllegalStateException("Unknown TextDocumentSyncKind: " + TEXT_DOCUMENT_SYNC_KIND);
         }
-
-        CompletableFuture.runAsync(() -> waitForResultAndHandleExceptions(future, null, uri));
     }
 
     @Override
@@ -362,6 +337,132 @@ public final class LanguageServerImpl extends LanguageServer {
         return CompletableFuture.completedFuture(Collections.emptyList());
     }
 
+    private void extractAndEvaluateExamples(URI uri, String sourceCode) {
+        Future<List<ExampleDefinition>> exampleDefinitionsFuture = truffleAdapter.exampleDefinitions(uri, sourceCode);
+        Supplier<List<ExampleDefinition>> supplier = () -> waitForResultAndHandleExceptions(exampleDefinitionsFuture, new ArrayList<>());
+        List<ExampleDefinition> exampleDefinitions = supplier.get();
+
+        openedFileUri2Examples.put(uri, exampleDefinitions);
+
+        Future<List<ExampleDefinition>> evaluatedExamplesFuture = truffleAdapter.evaluateExamplesAndProbes(uri, exampleDefinitions);
+        Supplier<List<ExampleDefinition>> evaluatedExamplesSupplier = () -> waitForResultAndHandleExceptions(evaluatedExamplesFuture, new ArrayList<>());
+        List<ExampleDefinition> evaluatedExamples = evaluatedExamplesSupplier.get();
+
+        ArrayList<Decoration> decorations = new ArrayList<>();
+
+        for (ExampleDefinition example : evaluatedExamples) {
+            for (ProbeDefinition probe : example.getProbes()) {
+                decorations.add(Decoration.create(
+                        Range.create(
+                                Position.create(probe.getLine(), probe.getStartColumn()),
+                                Position.create(probe.getLine(), probe.getEndColumn())
+                        ),
+                        probe.getResult().toString(),
+                        "probeResult"
+                ));
+            }
+            decorations.add(Decoration.create(
+                    Range.create(
+                            Position.create(example.getExampleDefinitionLine(), 0),
+                            Position.create(example.getExampleDefinitionLine(), example.getExampleDefinitionEndColumn())
+                    ),
+                    example.getExampleResult().toString(),
+                    "exampleResult"
+            ));
+        }
+
+        client.publishDecorations(PublishDecorationsParams.create(uri.toString(), decorations));
+    }
+
+    private String buildExampleStringFromArgs(Boolean functionAlreadyHasExamples, int indexOfNewlyCreatedExamples, JSONObject inputMappingObject) {
+        StringBuilder builder = new StringBuilder();
+
+        if (!functionAlreadyHasExamples) {
+            builder.append("/* Example\n");
+        }
+        builder.append(" * <Example");
+
+        builder.append(" :name=\"example").append(indexOfNewlyCreatedExamples).append("\"");
+
+        if (inputMappingObject.has("inputMapping")) {
+            JSONObject inputMapping = inputMappingObject.getJSONObject("inputMapping");
+
+            inputMapping.toMap().forEach((key, value) -> {
+                builder.append(" ");
+                builder.append(key);
+
+                builder.append("=");
+                builder.append(value.toString());
+            });
+        }
+
+        builder.append(" />\n");
+        if (!functionAlreadyHasExamples) {
+            builder.append(" */\n");
+        }
+
+        return builder.toString();
+    }
+
+    private Future<?> addExample(ExecuteCommandParams params) {
+        JSONObject inputMappingObject = params.getJsonData().getJSONArray("arguments").getJSONObject(0);
+
+        URI uri;
+        try {
+            uri = URI.create((String) inputMappingObject.get("documentUri"));
+        } catch (NullPointerException e) {
+            // FIXME This is needed to get argument-less examples to work, which are not intercepted in the extension
+            uri = URI.create((String) ((JSONObject) params.getArguments().get(1)).get("documentUri"));
+        }
+
+        int startLine = (int) inputMappingObject.get("startLine");
+
+        List<ExampleDefinition> existingExamples = this.openedFileUri2Examples.get(uri);
+        boolean functionAlreadyHasExamples = false;
+        int indexOfNewlyCreatedExamples = 1;
+        for (ExampleDefinition example : existingExamples) {
+            if (example.getFunctionStartLine() == startLine) {
+                functionAlreadyHasExamples = true;
+            }
+            String exampleNumerationPattern = "example(\\d+)";
+            Matcher m = Pattern.compile(exampleNumerationPattern).matcher(example.getExampleName());
+            if (m.find()) {
+                int exampleNumber = parseInt(m.group(1));
+                if (exampleNumber + 1 > indexOfNewlyCreatedExamples) {
+                    indexOfNewlyCreatedExamples = exampleNumber + 1;
+                }
+            }
+        }
+
+        // Build an <Example key=jsonStringOfValue /> element for the newly created example
+        String exampleString = buildExampleStringFromArgs(
+                functionAlreadyHasExamples,
+                indexOfNewlyCreatedExamples,
+                inputMappingObject
+        );
+
+        // Set the starting line to one line before the actual function declaration line
+        startLine -= 1;
+
+        if (functionAlreadyHasExamples) {
+            // If the closing comment tag of the Example block already exists, place the new example in the line above
+            startLine -= 1;
+        }
+
+        // Add the <Example /> element (inside a block comment) to the document at the corresponding position
+        TextEdit textEdit = TextEdit.insert(Position.create(startLine, 0), exampleString);
+
+        Map<String, List<TextEdit>> changes = new HashMap<>();
+        changes.put(uri.toString(), Collections.singletonList(textEdit));
+
+        WorkspaceEdit edit = WorkspaceEdit.create();
+        edit.setChanges(changes);
+
+        ApplyWorkspaceEditParams editParams = ApplyWorkspaceEditParams.create(edit);
+
+        return client.applyEdit(editParams).thenApply(ApplyWorkspaceEditResponse::isApplied);
+    }
+
     @Override
     public CompletableFuture<Object> executeCommand(ExecuteCommandParams params) {
         switch (params.getCommand()) {
@@ -383,6 +484,9 @@ public final class LanguageServerImpl extends LanguageServer {
             case CLEAR_ALL_COVERAGE:
                 Future<?> futureClearAll = truffleAdapter.clearCoverage();
                 return CompletableFuture.supplyAsync(() -> waitForResultAndHandleExceptions(futureClearAll));
+            case ADD_EXAMPLE_COMMAND:
+                Future<?> futureAddExample = addExample(params);
+                return CompletableFuture.supplyAsync(() -> waitForResultAndHandleExceptions(futureAddExample));
             default:
                 err.println("Unkown command: " + params.getCommand());
                 return CompletableFuture.completedFuture(new Object());

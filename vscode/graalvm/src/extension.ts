@@ -15,11 +15,14 @@ import { pathToFileURL } from 'url';
 import { LanguageClient, LanguageClientOptions, StreamInfo } from 'vscode-languageclient';
 import { installGraalVM, installGraalVMComponent, selectInstalledGraalVM } from './graalVMInstall';
 import { addNativeImageToPOM } from './graalVMNativeImage';
+import { PUBLISH_DECORATIONS_REQUEST, publishDecorations } from './custom_lsp_actions/publishDecorations';
+
 
 const OPEN_SETTINGS: string = 'Open Settings';
 const INSTALL_GRAALVM: string = 'Install GraalVM';
 const SELECT_GRAALVM: string = 'Select GraalVM';
 const INSTALL_GRAALVM_NATIVE_IMAGE_COMPONENT: string = 'Install GraalVM native-image Component';
+const START_DEBUG_CONNECT: string = 'Debug connect';
 const POLYGLOT: string = "polyglot";
 const LSPORT: number = 8123;
 
@@ -81,7 +84,7 @@ export function deactivate(): Thenable<void> {
 
 function startLanguageServer(graalVMHome: string) {
 	const inProcessServer = vscode.workspace.getConfiguration('graalvm').get('languageServer.inProcessServer') as boolean;
-	if (!inProcessServer) {
+	if (inProcessServer) {
 		const re = utils.findExecutable(POLYGLOT, graalVMHome);
 		if (re) {
 			let serverWorkDir: string | undefined = vscode.workspace.getConfiguration('graalvm').get('languageServer.currentWorkDir') as string;
@@ -93,13 +96,15 @@ function startLanguageServer(graalVMHome: string) {
 			if (delegateServers) {
 				lspOpt = '--lsp.Delegates=' + delegateServers;
 			}
-			const serverProcess = cp.spawn(re, ['--jvm', lspOpt, '--experimental-options', '--shell'], { cwd: serverWorkDir });
+			const serverProcess = cp.spawn(re, ['--vm.Xrunjdwp:transport=dt_socket,server=y,address=8000,suspend=n', '--log.lsp.org.graalvm.tools.lsp.server.types.LanguageServer.level=ALL', '--jvm', lspOpt, '--experimental-options', '--shell'], { cwd: serverWorkDir });
 			if (!serverProcess || !serverProcess.pid) {
 				vscode.window.showErrorMessage(`Launching server using command ${re} failed.`);
 			} else {
 				languageServerPID = serverProcess.pid;
 				serverProcess.stdout.once('data', () => {
-					connectToLanguageServer();
+					vscode.window.showInformationMessage('Click when ready to debug', START_DEBUG_CONNECT).then(() => {
+						connectToLanguageServer()
+					});
 					if (serverProcess) {
 					    serverProcess.stderr.on('data', data => {
 							if (client) {
@@ -141,6 +146,7 @@ function connectToLanguageServer() {
 	let prepareStatus = vscode.window.setStatusBarMessage("Graal Language Client: Connecting to GraalLS");
 	client.onReady().then(() => {
 		prepareStatus.dispose();
+		client.onNotification(PUBLISH_DECORATIONS_REQUEST, publishDecorations);
 		vscode.window.setStatusBarMessage('GraalLS is ready.', 3000);
 	}).catch(() => {
 		prepareStatus.dispose();

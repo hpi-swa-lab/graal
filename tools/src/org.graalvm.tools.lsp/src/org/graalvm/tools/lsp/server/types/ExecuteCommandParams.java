@@ -113,4 +113,8 @@ public class ExecuteCommandParams {
         json.put("command", command);
         return new ExecuteCommandParams(json);
     }
+
+    public JSONObject getJsonData() {
+        return jsonData;
+    }
 }

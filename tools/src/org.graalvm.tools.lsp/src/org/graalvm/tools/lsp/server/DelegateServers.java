@@ -228,7 +228,7 @@ public final class DelegateServers {
                 break;
             case "textDocument/codeLens":
                 CodeLensOptions clp = capabilities.getCodeLensProvider();
-                capability = (clp != null) ? clp.getResolveProvider() : null;
+                capability = clp != null;
                 break;
             case "textDocument/colorPresentation":
                 capability = capabilities.getColorProvider();

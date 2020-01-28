@@ -35,6 +35,7 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.graalvm.tools.lsp.definitions.LanguageAgnosticFunctionDeclarationDefinition;
 import org.graalvm.tools.lsp.server.types.TextDocumentContentChangeEvent;
 
 import com.oracle.truffle.api.CallTarget;
@@ -55,6 +56,7 @@ public final class TextDocumentSurrogate {
     private final List<TextDocumentContentChangeEvent> changeEventsSinceLastSuccessfulParsing;
     private final Map<SourceSectionReference, List<CoverageData>> section2coverageData;
     private String editorText;
+    private Map<SourceSection, LanguageAgnosticFunctionDeclarationDefinition> functionDeclarationDefinitionMap;
     private Boolean coverageAnalysisDone = Boolean.FALSE;
     private SourceWrapper sourceWrapper;
     private TextDocumentContentChangeEvent lastChange = null;
@@ -65,6 +67,7 @@ public final class TextDocumentSurrogate {
         this.section2coverageData = blueprint.section2coverageData;
         this.changeEventsSinceLastSuccessfulParsing = blueprint.changeEventsSinceLastSuccessfulParsing;
         this.editorText = blueprint.editorText;
+        this.functionDeclarationDefinitionMap = blueprint.functionDeclarationDefinitionMap;
         this.sourceWrapper = blueprint.sourceWrapper;
         this.lastChange = blueprint.lastChange;
         this.languageInfo = blueprint.languageInfo;
@@ -96,6 +99,15 @@ public final class TextDocumentSurrogate {
     public void setEditorText(String editorText) {
         this.editorText = editorText;
     }
+
+    public Map<SourceSection, LanguageAgnosticFunctionDeclarationDefinition> getFunctionDeclarationDefinitionMap() {
+        return functionDeclarationDefinitionMap;
+    }
+
+    public void setFunctionDeclarationDefinitionMap(Map<SourceSection, LanguageAgnosticFunctionDeclarationDefinition> functionDeclarationDefinitionMap) {
+        this.functionDeclarationDefinitionMap = functionDeclarationDefinitionMap;
+    }
+
 
     public Boolean getTypeHarvestingDone() {
         return coverageAnalysisDone;

@@ -26,12 +26,17 @@ package org.graalvm.tools.lsp.server.request;
 
 import java.io.IOException;
 import java.net.URI;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.logging.Level;
 import java.util.regex.Matcher;
 
+import com.oracle.truffle.api.*;
+import com.oracle.truffle.api.instrumentation.*;
+import com.oracle.truffle.api.interop.*;
+import org.graalvm.tools.lsp.definitions.ExampleDefinition;
+import org.graalvm.tools.lsp.definitions.LanguageAgnosticFunctionArgumentDefinition;
+import org.graalvm.tools.lsp.definitions.LanguageAgnosticFunctionDeclarationDefinition;
+import org.graalvm.tools.lsp.definitions.ProbeDefinition;
 import org.graalvm.tools.lsp.server.ContextAwareExecutor;
 import org.graalvm.tools.lsp.exceptions.DiagnosticsNotification;
 import org.graalvm.tools.lsp.exceptions.EvaluationResultException;
@@ -52,27 +57,11 @@ import org.graalvm.tools.lsp.server.utils.SourceWrapper;
 import org.graalvm.tools.lsp.server.utils.TextDocumentSurrogate;
 import org.graalvm.tools.lsp.server.utils.TextDocumentSurrogateMap;
 
-import com.oracle.truffle.api.CallTarget;
-import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
-import com.oracle.truffle.api.TruffleException;
-import com.oracle.truffle.api.TruffleLogger;
 import com.oracle.truffle.api.frame.FrameSlot;
 import com.oracle.truffle.api.frame.VirtualFrame;
-import com.oracle.truffle.api.instrumentation.EventBinding;
-import com.oracle.truffle.api.instrumentation.EventContext;
-import com.oracle.truffle.api.instrumentation.ExecutionEventNode;
-import com.oracle.truffle.api.instrumentation.ExecutionEventNodeFactory;
-import com.oracle.truffle.api.instrumentation.InstrumentableNode;
-import com.oracle.truffle.api.instrumentation.SourceSectionFilter;
 import com.oracle.truffle.api.instrumentation.SourceSectionFilter.Builder;
 import com.oracle.truffle.api.instrumentation.SourceSectionFilter.IndexRange;
-import com.oracle.truffle.api.instrumentation.StandardTags;
-import com.oracle.truffle.api.instrumentation.TruffleInstrument;
-import com.oracle.truffle.api.interop.InteropLibrary;
-import com.oracle.truffle.api.interop.TruffleObject;
-import com.oracle.truffle.api.interop.UnknownIdentifierException;
-import com.oracle.truffle.api.interop.UnsupportedMessageException;
 import com.oracle.truffle.api.nodes.ExecutableNode;
 import com.oracle.truffle.api.nodes.LanguageInfo;
 import com.oracle.truffle.api.nodes.Node;
@@ -88,6 +77,50 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
         super(env, surrogateMap, executor);
     }
 
+    private Map<SourceSection, LanguageAgnosticFunctionDeclarationDefinition> getFunctionDeclarations(SourceSectionFilter.SourcePredicate srcPredicate, URI uri) {
+        Map<SourceSection, LanguageAgnosticFunctionDeclarationDefinition> functionDeclarations = new HashMap<>();
+        SourceSectionFilter filter = SourceSectionFilter.newBuilder().sourceIs(srcPredicate).build();
+        env.getInstrumenter().visitLoadedSourceSections(filter, event -> {
+            Node node = event.getNode();
+            if (!(node instanceof InstrumentableNode)) {
+                return;
+            }
+            InstrumentableNode instrumentableNode = (InstrumentableNode) node;
+            LinkedList<Scope> scopesOuterToInner = getScopesOuterToInner(surrogateMap.get(uri), instrumentableNode);
+            scopesOuterToInner.forEach((scope -> {
+                if (scope.getName().equals(":program")) {
+                    return;
+                }
+
+                InteropLibrary interopLibrary = InteropLibrary.getFactory().createDispatched(5);
+
+                List<LanguageAgnosticFunctionArgumentDefinition> arguments = new ArrayList<>();
+
+                try {
+                    Object argumentMembers = interopLibrary.getMembers(scope.getArguments());
+
+                    long argumentCount = interopLibrary.getArraySize(argumentMembers);
+
+                    for (long i = 0; i < argumentCount; i++) {
+                        String argumentName = interopLibrary.readArrayElement(argumentMembers, i).toString();
+                        arguments.add(new LanguageAgnosticFunctionArgumentDefinition(argumentName, null));
+                    }
+                } catch (UnsupportedMessageException | InvalidArrayIndexException | NullPointerException e) {
+                    // Failed to parse arguments return none
+                }
+
+                LanguageAgnosticFunctionDeclarationDefinition function = new LanguageAgnosticFunctionDeclarationDefinition(
+                        scope.getName(),
+                        scope.getNode().getSourceSection().getStartLine(),
+                        scope.getNode().getSourceSection().getEndLine(),
+                        arguments
+                );
+                functionDeclarations.put(scope.getNode().getSourceSection(), function);
+            }));
+        });
+        return functionDeclarations;
+    }
+
     public CallTarget parse(final TextDocumentSurrogate surrogate) throws DiagnosticsNotification {
         if (!env.getLanguages().containsKey(surrogate.getLanguageId())) {
             throw new UnknownLanguageException("Unknown language: " + surrogate.getLanguageId() + ". Known languages are: " + env.getLanguages().keySet());
@@ -99,6 +132,13 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
             LOG.log(Level.FINE, "Parsing {0} {1}", new Object[]{surrogate.getLanguageId(), surrogate.getUri()});
             callTarget = env.parse(sourceWrapper.getSource());
             LOG.log(Level.FINER, "Parsing done.");
+
+            LOG.log(Level.FINE, "Extracting function symbols of file with URI {0}", new Object[]{surrogate.getUri()});
+            URI uri = surrogate.getUri();
+            SourceSectionFilter.SourcePredicate srcPredicate = newDefaultSourcePredicateBuilder().uriOrTruffleName(uri).build();
+            Map<SourceSection, LanguageAgnosticFunctionDeclarationDefinition> functionDeclarations = getFunctionDeclarations(srcPredicate, uri);
+            surrogate.setFunctionDeclarationDefinitionMap(functionDeclarations);
+            LOG.log(Level.FINER, "Extraction of function symbols done.");
         } catch (Exception e) {
             if (e instanceof TruffleException) {
                 throw DiagnosticsNotification.create(surrogate.getUri(),
@@ -113,6 +153,93 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
         }
 
         return callTarget;
+    }
+
+    public List<ExampleDefinition> evaluateExamplesAndProbes(URI uri, List<ExampleDefinition> examples) throws DiagnosticsNotification {
+        TextDocumentSurrogate originalSurrogate = surrogateMap.get(uri);
+
+        for (ExampleDefinition example : examples) {
+            TextDocumentSurrogate surrogate = originalSurrogate.copy();
+            surrogate.setEditorText(surrogate.getEditorText() + "\n" + example.getFunctionName());
+            final CallTarget callTarget = parse(surrogate);
+
+            List<EventBinding> eventBindingList = new ArrayList<>();
+
+            if (example.getProbeAll()) {
+                SourceSectionFilter sourceSectionFilter = SourceSectionFilter.
+                        newBuilder().
+                        tagIs(StandardTags.StatementTag.class).
+                        build();
+                eventBindingList.add(env.getInstrumenter().attachExecutionEventListener(sourceSectionFilter, new ExecutionEventListener() {
+                    @Override
+                    public void onEnter(EventContext context, VirtualFrame frame) {
+                        // Do nothing
+                    }
+
+                    @Override
+                    public void onReturnValue(EventContext context, VirtualFrame frame, Object result) {
+                        SourceSection sourceSection = context.getInstrumentedSourceSection();
+                        ProbeDefinition probe = new ProbeDefinition(sourceSection.getStartLine());
+
+                        example.getProbes().add(probe);
+
+                        probe.setResult(result);
+                        probe.setUri(sourceSection.getSource().getName());
+                        probe.setStartColumn(sourceSection.getStartColumn() + 1);
+                        probe.setEndColumn(sourceSection.getEndColumn() + 1);
+                    }
+
+                    @Override
+                    public void onReturnExceptional(EventContext context, VirtualFrame frame, Throwable exception) {
+                        // Do nothing
+                    }
+                }));
+            } else {
+                for (ProbeDefinition probe : example.getProbes()) {
+                    int line = probe.getLine();
+
+                    SourceSectionFilter sourceSectionFilter = SourceSectionFilter.
+                            newBuilder().
+                            tagIs(StandardTags.StatementTag.class).
+                            build();
+
+                    eventBindingList.add(env.getInstrumenter().attachExecutionEventListener(sourceSectionFilter, new ExecutionEventListener() {
+                        @Override
+                        public void onEnter(EventContext context, VirtualFrame frame) {
+                            // Do nothing
+                        }
+
+                        @Override
+                        public void onReturnValue(EventContext context, VirtualFrame frame, Object result) {
+                            SourceSection sourceSection = context.getInstrumentedSourceSection();
+
+                            probe.setResult(result);
+                            probe.setUri(sourceSection.getSource().getName());
+                            probe.setStartColumn(sourceSection.getStartColumn() + 1);
+                            probe.setEndColumn(sourceSection.getEndColumn() + 1);
+                        }
+
+                        @Override
+                        public void onReturnExceptional(EventContext context, VirtualFrame frame, Throwable exception) {
+                            // Do nothing
+                        }
+                    }));
+
+                }
+            }
+
+            Object exampleResult;
+            try {
+                exampleResult = callTarget.call();
+            } catch (Exception e) {
+                exampleResult = e.getMessage();
+            }
+            example.setExampleResult(exampleResult);
+
+            eventBindingList.forEach(EventBinding::dispose);
+        }
+
+        return examples;
     }
 
     public EvaluationResult tryDifferentEvalStrategies(TextDocumentSurrogate surrogate, Node nearestNode) throws DiagnosticsNotification {
