@@ -15,6 +15,8 @@ import { pathToFileURL } from 'url';
 import { LanguageClient, LanguageClientOptions, StreamInfo } from 'vscode-languageclient';
 import { installGraalVM, installGraalVMComponent, selectInstalledGraalVM } from './graalVMInstall';
 import { addNativeImageToPOM } from './graalVMNativeImage';
+import { PUBLISH_DECORATIONS_REQUEST, publishDecorations } from './custom_lsp_actions/publishDecorations';
+
 
 const OPEN_SETTINGS: string = 'Open Settings';
 const INSTALL_GRAALVM: string = 'Install GraalVM';
@@ -144,6 +146,7 @@ function connectToLanguageServer() {
 	let prepareStatus = vscode.window.setStatusBarMessage("Graal Language Client: Connecting to GraalLS");
 	client.onReady().then(() => {
 		prepareStatus.dispose();
+		client.onNotification(PUBLISH_DECORATIONS_REQUEST, publishDecorations);
 		vscode.window.setStatusBarMessage('GraalLS is ready.', 3000);
 	}).catch(() => {
 		prepareStatus.dispose();
