@@ -1,4 +1,5 @@
-## Init
+## Build & Init
+Build from `vm` directory including `tools`: `mx --dy /compiler,/graal-nodejs,/graalpython,/tools build`
 Do `cd tools` and run `../../mx/mx ideinit --no-python-projects`
 Open `tools` in Intellij
 
