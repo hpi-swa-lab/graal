@@ -18,7 +18,7 @@ const parseRangeFromGraal = ({
 	// VS Code uses zero-indexing for line numbers while Graal uses one-indexing...
 	new Position(startLine - 1, startCharacter),
 	new Position(endLine - 1, endCharacter)
-)
+);
 
 const explicitDefaultDecorationType: TextEditorDecorationType = window.createTextEditorDecorationType({
 	after: {
@@ -36,7 +36,7 @@ function explicitDecorationStyleForType(type: string): object {
 		"exampleResult": {
 			backgroundColor: "#636360"
 		}
-	}
+	};
 
 	return styleForType[type] || {};
 }
@@ -46,7 +46,7 @@ export function publishDecorations({ uri, decorations }): void {
 
 	// replace URL encoded spaces
 	const fileName: string = uri.split('file://')[1].replace(/%20/g, ' ');
-	const openEditor = window.visibleTextEditors.filter(editor => editor.document.fileName === fileName)[0]
+	const openEditor = window.visibleTextEditors.filter(editor => editor.document.fileName === fileName)[0];
 
 	decorations = decorations.map(
 		({range: rangeParams, decorationText, type}) => ({range: parseRangeFromGraal(rangeParams), decorationText, type})
@@ -79,7 +79,7 @@ export function publishDecorations({ uri, decorations }): void {
 				contentText: ` ${decorationText} `
 			}
 		}
-	}))
+	}));
 
 	openEditor.setDecorations(
 		explicitDefaultDecorationType,

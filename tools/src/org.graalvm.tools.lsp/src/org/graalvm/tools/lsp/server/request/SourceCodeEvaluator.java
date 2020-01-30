@@ -278,6 +278,7 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
 
                 SourceSectionFilter sourceSectionFilter = SourceSectionFilter.
                         newBuilder().
+                        lineIs(line).
                         tagIs(StandardTags.StatementTag.class).
                         build();
 
