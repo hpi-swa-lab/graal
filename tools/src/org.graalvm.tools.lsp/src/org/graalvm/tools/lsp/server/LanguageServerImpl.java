@@ -343,7 +343,7 @@ public final class LanguageServerImpl extends LanguageServer {
                             Position.create(probe.getLine(), probe.getEndColumn())
                     ),
                     probe.getResult().toString(),
-                    "probeResult"
+                    Decoration.PROBE_DECORATION_TYPE
             ));
         }
         decorations.add(Decoration.create(
@@ -352,7 +352,7 @@ public final class LanguageServerImpl extends LanguageServer {
                         Position.create(example.getExampleDefinitionLine(), example.getExampleDefinitionEndColumn())
                 ),
                 example.getExampleResult().toString(),
-                "exampleResult"
+                Decoration.EXAMPLE_DECORATION_TYPE
         ));
         for (AssertionDefinition assertion : example.getAssertions()) {
             decorations.add(Decoration.create(
