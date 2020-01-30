@@ -38,10 +38,7 @@ import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.NodeVisitor;
 import com.oracle.truffle.api.source.Source;
 import com.oracle.truffle.api.source.SourceSection;
-import org.graalvm.tools.lsp.definitions.ExampleDefinition;
-import org.graalvm.tools.lsp.definitions.LanguageAgnosticFunctionArgumentDefinition;
-import org.graalvm.tools.lsp.definitions.LanguageAgnosticFunctionDeclarationDefinition;
-import org.graalvm.tools.lsp.definitions.ProbeDefinition;
+import org.graalvm.tools.lsp.definitions.*;
 import org.graalvm.tools.lsp.exceptions.DiagnosticsNotification;
 import org.graalvm.tools.lsp.exceptions.EvaluationResultException;
 import org.graalvm.tools.lsp.exceptions.InvalidCoverageScriptURI;
@@ -225,94 +222,7 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
         return callTarget;
     }
 
-    public List<ExampleDefinition> evaluateExamplesAndProbes(URI uri, List<ExampleDefinition> examples) throws DiagnosticsNotification {
-        TextDocumentSurrogate originalSurrogate = surrogateMap.get(uri);
-
-        for (ExampleDefinition example : examples) {
-            TextDocumentSurrogate surrogate = originalSurrogate.copy();
-            surrogate.setEditorText(surrogate.getEditorText() + "\n" + example.getFunctionName());
-            final CallTarget callTarget = parse(surrogate);
-
-            List<EventBinding> eventBindingList = new ArrayList<>();
-
-            if (example.getProbeAll()) {
-                SourceSectionFilter sourceSectionFilter = SourceSectionFilter.
-                        newBuilder().
-                        tagIs(StandardTags.StatementTag.class).
-                        build();
-                eventBindingList.add(env.getInstrumenter().attachExecutionEventListener(sourceSectionFilter, new ExecutionEventListener() {
-                    @Override
-                    public void onEnter(EventContext context, VirtualFrame frame) {
-                        // Do nothing
-                    }
-
-                    @Override
-                    public void onReturnValue(EventContext context, VirtualFrame frame, Object result) {
-                        SourceSection sourceSection = context.getInstrumentedSourceSection();
-                        ProbeDefinition probe = new ProbeDefinition(sourceSection.getStartLine());
-
-                        example.getProbes().add(probe);
-
-                        probe.setResult(result);
-                        probe.setUri(sourceSection.getSource().getName());
-                        probe.setStartColumn(sourceSection.getStartColumn() + 1);
-                        probe.setEndColumn(sourceSection.getEndColumn() + 1);
-                    }
-
-                    @Override
-                    public void onReturnExceptional(EventContext context, VirtualFrame frame, Throwable exception) {
-                        // Do nothing
-                    }
-                }));
-            } else {
-                for (ProbeDefinition probe : example.getProbes()) {
-                    int line = probe.getLine();
-
-                    SourceSectionFilter sourceSectionFilter = SourceSectionFilter.
-                            newBuilder().
-                            tagIs(StandardTags.StatementTag.class).
-                            build();
-
-                    eventBindingList.add(env.getInstrumenter().attachExecutionEventListener(sourceSectionFilter, new ExecutionEventListener() {
-                        @Override
-                        public void onEnter(EventContext context, VirtualFrame frame) {
-                            // Do nothing
-                        }
-
-                        @Override
-                        public void onReturnValue(EventContext context, VirtualFrame frame, Object result) {
-                            SourceSection sourceSection = context.getInstrumentedSourceSection();
-
-                            probe.setResult(result);
-                            probe.setUri(sourceSection.getSource().getName());
-                            probe.setStartColumn(sourceSection.getStartColumn() + 1);
-                            probe.setEndColumn(sourceSection.getEndColumn() + 1);
-                        }
-
-                        @Override
-                        public void onReturnExceptional(EventContext context, VirtualFrame frame, Throwable exception) {
-                            // Do nothing
-                        }
-                    }));
-
-                }
-            }
-
-            Object exampleResult;
-            try {
-                exampleResult = callTarget.call();
-            } catch (Exception e) {
-                exampleResult = e.getMessage();
-            }
-            example.setExampleResult(exampleResult);
-
-            eventBindingList.forEach(EventBinding::dispose);
-        }
-
-        return examples;
-    }
-
-    public ExampleDefinition evaluateExampleAndProbes(URI uri, ExampleDefinition example) throws DiagnosticsNotification {
+    public ExampleDefinition evaluateProbesAndAssertionsForExample(URI uri, ExampleDefinition example) throws DiagnosticsNotification {
         TextDocumentSurrogate originalSurrogate = surrogateMap.get(uri);
 
         TextDocumentSurrogate surrogate = originalSurrogate.copy();
@@ -335,12 +245,24 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
                 @Override
                 public void onReturnValue(EventContext context, VirtualFrame frame, Object result) {
                     SourceSection sourceSection = context.getInstrumentedSourceSection();
+
+                    String uri = sourceSection.getSource().getName();
+
+                    if (result == null) {
+                        return;
+                    }
+
+                    // TODO Find a better way of enabling cross-file probing
+                    if (!uri.equals(example.getUri())) {
+                        uri = example.getUri().substring(0, example.getUri().lastIndexOf("/") + 1) + uri;
+                    }
+
                     ProbeDefinition probe = new ProbeDefinition(sourceSection.getStartLine());
 
                     example.getProbes().add(probe);
 
                     probe.setResult(result);
-                    probe.setUri(sourceSection.getSource().getName());
+                    probe.setUri(uri);
                     probe.setStartColumn(sourceSection.getStartColumn() + 1);
                     probe.setEndColumn(sourceSection.getEndColumn() + 1);
                 }
@@ -369,8 +291,19 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
                     public void onReturnValue(EventContext context, VirtualFrame frame, Object result) {
                         SourceSection sourceSection = context.getInstrumentedSourceSection();
 
+                        String uri = sourceSection.getSource().getName();
+
+                        if (result == null) {
+                            return;
+                        }
+
+                        // TODO Find a better way of enabling cross-file probing
+                        if (!uri.equals(example.getUri())) {
+                            uri = example.getUri().substring(0, example.getUri().lastIndexOf("/") + 1) + uri;
+                        }
+
                         probe.setResult(result);
-                        probe.setUri(sourceSection.getSource().getName());
+                        probe.setUri(uri);
                         probe.setStartColumn(sourceSection.getStartColumn() + 1);
                         probe.setEndColumn(sourceSection.getEndColumn() + 1);
                     }
@@ -382,6 +315,49 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
                 }));
 
             }
+        }
+
+        for (AssertionDefinition assertion : example.getAssertions()) {
+            int line = assertion.getLine();
+
+            SourceSectionFilter sourceSectionFilter = SourceSectionFilter.
+                    newBuilder().
+                    lineIs(line).
+                    tagIs(StandardTags.StatementTag.class).
+                    build();
+
+            eventBindingList.add(env.getInstrumenter().attachExecutionEventListener(sourceSectionFilter, new ExecutionEventListener() {
+                @Override
+                public void onEnter(EventContext context, VirtualFrame frame) {
+                    // Do nothing
+                }
+
+                @Override
+                public void onReturnValue(EventContext context, VirtualFrame frame, Object result) {
+                    SourceSection sourceSection = context.getInstrumentedSourceSection();
+
+                    String uri = sourceSection.getSource().getName();
+
+                    if (result == null) {
+                        return;
+                    }
+
+                    // TODO Find a better way of enabling cross-file probing
+                    if (!uri.equals(example.getUri())) {
+                        uri = example.getUri().substring(0, example.getUri().lastIndexOf("/") + 1) + uri;
+                    }
+
+                    assertion.setResult(result);
+                    assertion.setUri(uri);
+                    assertion.setStartColumn(sourceSection.getStartColumn());
+                    assertion.setEndColumn(sourceSection.getEndColumn());
+                }
+
+                @Override
+                public void onReturnExceptional(EventContext context, VirtualFrame frame, Throwable exception) {
+                    // Do nothing
+                }
+            }));
         }
 
         Object exampleResult;

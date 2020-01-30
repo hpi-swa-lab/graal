@@ -47,6 +47,7 @@ import java.util.stream.Collectors;
 import com.oracle.truffle.api.CallTarget;
 import org.graalvm.collections.Pair;
 
+import org.graalvm.tools.lsp.definitions.AssertionDefinition;
 import org.graalvm.tools.lsp.definitions.ExampleDefinition;
 import org.graalvm.tools.lsp.definitions.ProbeDefinition;
 import org.graalvm.tools.lsp.server.types.Decoration;
@@ -353,6 +354,16 @@ public final class LanguageServerImpl extends LanguageServer {
                 example.getExampleResult().toString(),
                 "exampleResult"
         ));
+        for (AssertionDefinition assertion : example.getAssertions()) {
+            decorations.add(Decoration.create(
+                    Range.create(
+                            Position.create(assertion.getLine(), assertion.getStartColumn()),
+                            Position.create(assertion.getLine(), assertion.getEndColumn())
+                    ),
+                    Boolean.toString(assertion.isAssertionTrue()),
+                    Decoration.ASSERTION_DECORATION_TYPE
+            ));
+        }
         return decorations;
     }
 
@@ -366,7 +377,7 @@ public final class LanguageServerImpl extends LanguageServer {
         List<CompletableFuture<ExampleDefinition>> futures = new LinkedList<>();
 
         for (ExampleDefinition exampleDefinition : exampleDefinitions) {
-            futures.add(CompletableFuture.supplyAsync(() -> waitForResultAndHandleExceptions(truffleAdapter.evaluateExampleAndProbes(uri, exampleDefinition))));
+            futures.add(CompletableFuture.supplyAsync(() -> waitForResultAndHandleExceptions(truffleAdapter.evaluateProbesAndAssertionsForExample(uri, exampleDefinition))));
         }
 
         CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))

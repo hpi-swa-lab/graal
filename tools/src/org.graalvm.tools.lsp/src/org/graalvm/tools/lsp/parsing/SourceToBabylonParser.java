@@ -1,9 +1,6 @@
 package org.graalvm.tools.lsp.parsing;
 
-import org.graalvm.tools.lsp.definitions.ExampleDefinition;
-import org.graalvm.tools.lsp.definitions.LanguageAgnosticFunctionArgumentDefinition;
-import org.graalvm.tools.lsp.definitions.LanguageAgnosticFunctionDeclarationDefinition;
-import org.graalvm.tools.lsp.definitions.ProbeDefinition;
+import org.graalvm.tools.lsp.definitions.*;
 
 import java.util.*;
 import java.util.regex.Matcher;
@@ -38,15 +35,17 @@ public class SourceToBabylonParser {
             Map<String, Object> exampleParameters = new HashMap<>();
             for (String substring : parameterStrings.split(" ")) {
                 if (!substring.equals("")) {
-                    exampleParameters.put(substring.split("=")[0], substring.split("=")[1].replace(",", ""));
+                    exampleParameters.put(substring.split("=")[0], substring.split("=")[1]);
                 }
             }
             this.exampleInvocationCode = this.getExampleInvocationCode(lineNumber, exampleParameters, this.functionsInSource);
             List<ProbeDefinition> probes = this.getProbesForExample(lineNumber, this.getFunctionEndLineNumber(lineNumber), probeMode);
+            List<AssertionDefinition> assertions = this.getAssertionsForExample(example[0]);
             this.examples.add(new ExampleDefinition(example[0],
                     lineNumber,
                     this.exampleInvocationCode,
                     probes,
+                    assertions,
                     this.getExampleDefinitionLine(example[0]),
                     this.getExampleDefinitionEndColumn(example[0]),
                     this.uri, probeMode));
@@ -159,8 +158,22 @@ public class SourceToBabylonParser {
         return functionNameForExample + "(" + String.join(", ", argumentValues) + ")";
     }
 
-    private Boolean needsExplicitProbe(String probeMode, String[] lines, Integer at) {
-        return ((!probeMode.equals("all") && lines[at].trim().equals("// <Probe />")));
+    public int getLineNumberOfAssertedStatement(String assertionString) {
+        String[] lines = this.annotatedSource.split("\n");
+        boolean found = false;
+
+        for (int i = 0; i < lines.length; i++) {
+            if (lines[i].contains(assertionString)) {
+                found = true;
+            }
+            if (found) {
+                if (!lines[i].contains("<Assertion")) {
+                    return i;
+                }
+            }
+        }
+
+        return -1;
     }
 
     private List<ProbeDefinition> getProbesForExample(Integer functionStart, Integer functionEnd, String probeMode) {
@@ -173,6 +186,49 @@ public class SourceToBabylonParser {
             }
         }
         return probes;
+    }
+
+    private List<AssertionDefinition> getAssertionsForExample(String exampleName) {
+        ArrayList<AssertionDefinition> assertions = new ArrayList<>();
+
+        String assertionAnnotationPattern = "<(Assertion[a-zA-Z0-9_]*) (.*)\\/>";
+        Matcher m = Pattern.compile(assertionAnnotationPattern).matcher(this.annotatedSource);
+        while (m.find()) {
+            int assertedStatementLineNumber = this.getLineNumberOfAssertedStatement(m.group());
+            String exampleForAssertion = m.group(2).trim().split(" ")[0].split("=")[1];
+            if (!exampleName.equals(exampleForAssertion)) {
+                continue;
+            }
+            String expectedValue = m.group(2).trim().split(" ")[1].split("=")[1];
+            Object expectedValueObject = convertExpectedValueType(expectedValue);
+            assertions.add(new AssertionDefinition(assertedStatementLineNumber + 1, expectedValueObject));
+        }
+
+        return assertions;
+    }
+
+    // TODO: get rid of this once guest language context is easier to access
+    private Object convertExpectedValueType(String expectedValue) {
+        if (expectedValue.startsWith("\"") && expectedValue.endsWith("\"")) {
+            return expectedValue.substring(1, expectedValue.length() - 1);
+        }
+
+        try {
+            return Integer.parseInt(expectedValue);
+        } catch (NumberFormatException e) {
+            try {
+                return Double.parseDouble(expectedValue);
+            } catch (NumberFormatException ex) {
+                // TODO: language-specific (issue #61)
+                if (expectedValue.equals("true") || expectedValue.equals("True")) {
+                    return true;
+                } else if (expectedValue.equals("false") || expectedValue.equals("False")) {
+                    return false;
+                } else {
+                    return expectedValue;
+                }
+            }
+        }
     }
 
 }

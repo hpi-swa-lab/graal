@@ -7,6 +7,7 @@ public class ExampleDefinition {
     private int functionStartLine;
     private String functionName;
     private List<ProbeDefinition> probes;
+    private List<AssertionDefinition> assertions;
     private Boolean probeAll;
     private Object exampleResult;
     private int exampleDefinitionLine;
@@ -17,6 +18,7 @@ public class ExampleDefinition {
                              int functionStartLine,
                              String functionName,
                              List<ProbeDefinition> probes,
+                             List<AssertionDefinition> assertions,
                              int exampleDefinitionLine,
                              int exampleDefinitionEndColumn,
                              String uri, String probeMode) {
@@ -24,6 +26,7 @@ public class ExampleDefinition {
         this.functionStartLine = functionStartLine;
         this.functionName = functionName;
         this.probes = probes;
+        this.assertions = assertions;
         this.probeAll = (probeMode.equals("all"));
         this.exampleDefinitionLine = exampleDefinitionLine;
         this.exampleDefinitionEndColumn = exampleDefinitionEndColumn;
@@ -46,9 +49,14 @@ public class ExampleDefinition {
         return this.probes;
     }
 
+    public List<AssertionDefinition> getAssertions() {
+        return this.assertions;
+    }
+
     public Boolean getProbeAll() {
         return probeAll;
     }
+
     public Object getExampleResult() {
         return exampleResult;
     }
