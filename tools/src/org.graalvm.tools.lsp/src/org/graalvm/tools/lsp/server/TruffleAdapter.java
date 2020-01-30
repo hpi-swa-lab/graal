@@ -165,6 +165,10 @@ public final class TruffleAdapter implements VirtualLanguageServerFileProvider {
         return contextAwareExecutor.executeWithNestedContext(() -> sourceCodeEvaluator.evaluateExamplesAndProbes(uri, examples));
     }
 
+    public Future<ExampleDefinition> evaluateExampleAndProbes(URI uri, ExampleDefinition example) {
+        return contextAwareExecutor.executeWithNestedContext(() -> sourceCodeEvaluator.evaluateExampleAndProbes(uri, example));
+    }
+
     /**
      * Special handling needed, because some LSP clients send a MIME type as langId.
      *

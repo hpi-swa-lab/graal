@@ -31,12 +31,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.URI;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -47,6 +42,7 @@ import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import com.oracle.truffle.api.CallTarget;
 import org.graalvm.collections.Pair;
@@ -154,7 +150,7 @@ public final class LanguageServerImpl extends LanguageServer {
     @Override
     public CompletableFuture<CompletionList> completion(CompletionParams position) {
         Future<CompletionList> futureCompletionList = truffleAdapter.completion(URI.create(position.getTextDocument().getUri()), position.getPosition().getLine(),
-                        position.getPosition().getCharacter(), position.getContext());
+                position.getPosition().getCharacter(), position.getContext());
         return CompletableFuture.supplyAsync(() -> waitForResultAndHandleExceptions(futureCompletionList, truffleAdapter.completionHandler.emptyList));
     }
 
@@ -189,7 +185,7 @@ public final class LanguageServerImpl extends LanguageServer {
     @Override
     public CompletableFuture<List<? extends DocumentHighlight>> documentHighlight(TextDocumentPositionParams position) {
         Future<List<? extends DocumentHighlight>> future = truffleAdapter.documentHighlight(URI.create(position.getTextDocument().getUri()), position.getPosition().getLine(),
-                        position.getPosition().getCharacter());
+                position.getPosition().getCharacter());
         Supplier<List<? extends DocumentHighlight>> supplier = () -> waitForResultAndHandleExceptions(future, Collections.emptyList());
         return CompletableFuture.supplyAsync(supplier);
     }
@@ -284,7 +280,7 @@ public final class LanguageServerImpl extends LanguageServer {
     }
 
     private void processChanges(final String documentUri,
-                    final List<? extends TextDocumentContentChangeEvent> list) {
+                                final List<? extends TextDocumentContentChangeEvent> list) {
         String langId = openedFileUri2LangId.get(URI.create(documentUri));
         if (langId == null) {
             LOG.warning("Changed document that was not opened: " + documentUri);
@@ -337,6 +333,29 @@ public final class LanguageServerImpl extends LanguageServer {
         return CompletableFuture.completedFuture(Collections.emptyList());
     }
 
+    private List<Decoration> getListOfDecorationsForEvaluatedExample(ExampleDefinition example) {
+        ArrayList<Decoration> decorations = new ArrayList<>();
+        for (ProbeDefinition probe : example.getProbes()) {
+            decorations.add(Decoration.create(
+                    Range.create(
+                            Position.create(probe.getLine(), probe.getStartColumn()),
+                            Position.create(probe.getLine(), probe.getEndColumn())
+                    ),
+                    probe.getResult().toString(),
+                    "probeResult"
+            ));
+        }
+        decorations.add(Decoration.create(
+                Range.create(
+                        Position.create(example.getExampleDefinitionLine(), 0),
+                        Position.create(example.getExampleDefinitionLine(), example.getExampleDefinitionEndColumn())
+                ),
+                example.getExampleResult().toString(),
+                "exampleResult"
+        ));
+        return decorations;
+    }
+
     private void extractAndEvaluateExamples(URI uri, String sourceCode) {
         Future<List<ExampleDefinition>> exampleDefinitionsFuture = truffleAdapter.exampleDefinitions(uri, sourceCode);
         Supplier<List<ExampleDefinition>> supplier = () -> waitForResultAndHandleExceptions(exampleDefinitionsFuture, new ArrayList<>());
@@ -344,34 +363,18 @@ public final class LanguageServerImpl extends LanguageServer {
 
         openedFileUri2Examples.put(uri, exampleDefinitions);
 
-        Future<List<ExampleDefinition>> evaluatedExamplesFuture = truffleAdapter.evaluateExamplesAndProbes(uri, exampleDefinitions);
-        Supplier<List<ExampleDefinition>> evaluatedExamplesSupplier = () -> waitForResultAndHandleExceptions(evaluatedExamplesFuture, new ArrayList<>());
-        List<ExampleDefinition> evaluatedExamples = evaluatedExamplesSupplier.get();
+        List<CompletableFuture<ExampleDefinition>> futures = new LinkedList<>();
 
-        ArrayList<Decoration> decorations = new ArrayList<>();
-
-        for (ExampleDefinition example : evaluatedExamples) {
-            for (ProbeDefinition probe : example.getProbes()) {
-                decorations.add(Decoration.create(
-                        Range.create(
-                                Position.create(probe.getLine(), probe.getStartColumn()),
-                                Position.create(probe.getLine(), probe.getEndColumn())
-                        ),
-                        probe.getResult().toString(),
-                        "probeResult"
-                ));
-            }
-            decorations.add(Decoration.create(
-                    Range.create(
-                            Position.create(example.getExampleDefinitionLine(), 0),
-                            Position.create(example.getExampleDefinitionLine(), example.getExampleDefinitionEndColumn())
-                    ),
-                    example.getExampleResult().toString(),
-                    "exampleResult"
-            ));
+        for (ExampleDefinition exampleDefinition : exampleDefinitions) {
+            futures.add(CompletableFuture.supplyAsync(() -> waitForResultAndHandleExceptions(truffleAdapter.evaluateExampleAndProbes(uri, exampleDefinition))));
         }
 
-        client.publishDecorations(PublishDecorationsParams.create(uri.toString(), decorations));
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                .thenApply(ignored -> futures.stream()
+                        .map(CompletableFuture::join)
+                        .flatMap(example -> getListOfDecorationsForEvaluatedExample(example).stream()).collect(Collectors.toList())
+                )
+                .thenAccept(decorations -> client.publishDecorations(PublishDecorationsParams.create(uri.toString(), decorations)));
     }
 
     private String buildExampleStringFromArgs(Boolean functionAlreadyHasExamples, int indexOfNewlyCreatedExamples, JSONObject inputMappingObject) {
