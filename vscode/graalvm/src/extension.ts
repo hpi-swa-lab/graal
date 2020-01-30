@@ -10,9 +10,10 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as cp from 'child_process';
 import * as utils from './utils';
+import setVariableValuesMultiStepInput from './setVariableValuesMultiStepInput';
 import { Socket } from 'net';
 import { pathToFileURL } from 'url';
-import { LanguageClient, LanguageClientOptions, StreamInfo } from 'vscode-languageclient';
+import { LanguageClient, LanguageClientOptions, StreamInfo, ResolveCodeLensSignature, ProvideCodeLensesSignature } from 'vscode-languageclient';
 import { installGraalVM, installGraalVMComponent, selectInstalledGraalVM } from './graalVMInstall';
 import { addNativeImageToPOM } from './graalVMNativeImage';
 import { PUBLISH_DECORATIONS_REQUEST, publishDecorations } from './custom_lsp_actions/publishDecorations';
@@ -52,9 +53,9 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
 		if (e.affectsConfiguration('graalvm.home')) {
 			config();
-			stopLanguageServer().then(() => startLanguageServer(vscode.workspace.getConfiguration('graalvm').get('home') as string));
+			stopLanguageServer().then(() => startLanguageServer(context, vscode.workspace.getConfiguration('graalvm').get('home') as string));
 		} else if (e.affectsConfiguration('graalvm.languageServer.currentWorkDir') || e.affectsConfiguration('graalvm.languageServer.inProcessServer')) {
-			stopLanguageServer().then(() => startLanguageServer(vscode.workspace.getConfiguration('graalvm').get('home') as string));
+			stopLanguageServer().then(() => startLanguageServer(context, vscode.workspace.getConfiguration('graalvm').get('home') as string));
 		}
 	}));
 	const graalVMHome = vscode.workspace.getConfiguration('graalvm').get('home') as string;
@@ -74,7 +75,7 @@ export function activate(context: vscode.ExtensionContext) {
 		});
 	} else {
 		config();
-		startLanguageServer(graalVMHome);
+		startLanguageServer(context, graalVMHome);
 	}
 }
 
@@ -82,7 +83,7 @@ export function deactivate(): Thenable<void> {
 	return stopLanguageServer();
 }
 
-function startLanguageServer(graalVMHome: string) {
+function startLanguageServer(context: vscode.ExtensionContext, graalVMHome: string) {
 	const inProcessServer = vscode.workspace.getConfiguration('graalvm').get('languageServer.inProcessServer') as boolean;
 	if (inProcessServer) {
 		const re = utils.findExecutable(POLYGLOT, graalVMHome);
@@ -103,7 +104,7 @@ function startLanguageServer(graalVMHome: string) {
 				languageServerPID = serverProcess.pid;
 				serverProcess.stdout.once('data', () => {
 					vscode.window.showInformationMessage('Click when ready to debug', START_DEBUG_CONNECT).then(() => {
-						connectToLanguageServer()
+						connectToLanguageServer(context);
 					});
 					if (serverProcess) {
 					    serverProcess.stderr.on('data', data => {
@@ -120,7 +121,7 @@ function startLanguageServer(graalVMHome: string) {
 	}
 }
 
-function connectToLanguageServer() {
+function connectToLanguageServer(context: vscode.ExtensionContext) {
 	const connection = () => new Promise<StreamInfo>((resolve, reject) => {
 		const socket = new Socket();
 		socket.once('error', (e) => {
@@ -140,8 +141,72 @@ function connectToLanguageServer() {
 			{ scheme: 'file', language: 'python' },
 			{ scheme: 'file', language: 'r' },
 			{ scheme: 'file', language: 'ruby' }
-		]
+		],
+		middleware: {
+			resolveCodeLens(this: void, codeLens: vscode.CodeLens, token: vscode.CancellationToken, next: ResolveCodeLensSignature): vscode.ProviderResult<vscode.CodeLens> {
+				return next(codeLens, token);
+			},
+			provideCodeLenses: async function (this: void, document: vscode.TextDocument, token: vscode.CancellationToken, next: ProvideCodeLensesSignature): Promise<vscode.CodeLens[]> {
+				const providerResult = next(document, token);
+				let codeLenses = undefined as vscode.CodeLens[];
+				if (Array.isArray(providerResult as vscode.CodeLens[])) {
+					codeLenses = providerResult as vscode.CodeLens[];
+				} else if (typeof (providerResult as Thenable<vscode.CodeLens[]>).then === 'function') {
+					codeLenses = await providerResult;
+				}
+
+				let index = 0;
+
+				context.subscriptions.forEach(disposable => {
+					if (disposable instanceof utils.NamedDisposable && disposable.getName().includes('ask-for-user-input')) {
+						disposable.dispose();
+					}
+				});
+
+				codeLenses.forEach(codeLens => {
+					const command = codeLens.command;
+
+					if (command.arguments.some(utils.isCommandExpectingUserInputArgument)) {
+						const originalCommand = command.command;
+						const inputMapping = command.arguments.find(utils.isCommandExpectingUserInputArgument).inputMapping;
+						const replacementCommand = `${originalCommand}__ask-for-user-input__${index}`;
+						const replacementCommandHandler = () => {
+							const amountOfInputs = Object.keys(inputMapping).length;
+							const options: { [key: string]: (context: vscode.ExtensionContext) => Promise<any> } = {
+								[`Enter values for ${amountOfInputs} example variables…`]: () => setVariableValuesMultiStepInput(inputMapping),
+							};
+							const quickPick = vscode.window.createQuickPick();
+							quickPick.items = Object.keys(options).map(label => ({ label }));
+							quickPick.onDidChangeSelection(selection => {
+								if (selection[0]) {
+									options[selection[0].label](context)
+										.then((inputMapping?: IInputMapping) => vscode.commands.executeCommand(originalCommand, {
+											...command.arguments.reduce((object, argument) => {
+												return {
+													...object,
+													...argument,
+												};
+											}, {}), inputMapping
+										}))
+										// tslint:disable-next-line: no-console
+										.catch(console.error);
+								}
+							});
+							quickPick.onDidHide(() => quickPick.dispose());
+							quickPick.show();
+						};
+						const disposable: vscode.Disposable = vscode.commands.registerCommand(replacementCommand, replacementCommandHandler);
+						context.subscriptions.push(new utils.NamedDisposable(disposable, replacementCommand));
+						command.command = replacementCommand;
+						index++;
+					}
+				});
+
+				return codeLenses;
+			},
+		},
 	};
+
 	client = new LanguageClient('GraalVM Language Client', connection, clientOptions);
 	let prepareStatus = vscode.window.setStatusBarMessage("Graal Language Client: Connecting to GraalLS");
 	client.onReady().then(() => {
@@ -236,7 +301,7 @@ class GraalVMDebugAdapterTracker implements vscode.DebugAdapterTrackerFactory {
 						languageServerPID = message.body.data.pid;
 					}
 					if (message.event === 'initialized') {
-						connectToLanguageServer();
+						connectToLanguageServer(null);
 					}
 				}
 			}
