@@ -333,6 +333,29 @@ public final class LanguageServerImpl extends LanguageServer {
         return CompletableFuture.completedFuture(Collections.emptyList());
     }
 
+    private List<Decoration> getListOfDecorationsForEvaluatedExample(ExampleDefinition example) {
+        ArrayList<Decoration> decorations = new ArrayList<>();
+        for (ProbeDefinition probe : example.getProbes()) {
+            decorations.add(Decoration.create(
+                    Range.create(
+                            Position.create(probe.getLine(), probe.getStartColumn()),
+                            Position.create(probe.getLine(), probe.getEndColumn())
+                    ),
+                    probe.getResult().toString(),
+                    "probeResult"
+            ));
+        }
+        decorations.add(Decoration.create(
+                Range.create(
+                        Position.create(example.getExampleDefinitionLine(), 0),
+                        Position.create(example.getExampleDefinitionLine(), example.getExampleDefinitionEndColumn())
+                ),
+                example.getExampleResult().toString(),
+                "exampleResult"
+        ));
+        return decorations;
+    }
+
     private void extractAndEvaluateExamples(URI uri, String sourceCode) {
         Future<List<ExampleDefinition>> exampleDefinitionsFuture = truffleAdapter.exampleDefinitions(uri, sourceCode);
         Supplier<List<ExampleDefinition>> supplier = () -> waitForResultAndHandleExceptions(exampleDefinitionsFuture, new ArrayList<>());
@@ -349,28 +372,7 @@ public final class LanguageServerImpl extends LanguageServer {
         CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
                 .thenApply(ignored -> futures.stream()
                         .map(CompletableFuture::join)
-                        .flatMap(example -> {
-                            ArrayList<Decoration> decorations = new ArrayList<>();
-                            for (ProbeDefinition probe : example.getProbes()) {
-                                decorations.add(Decoration.create(
-                                        Range.create(
-                                                Position.create(probe.getLine(), probe.getStartColumn()),
-                                                Position.create(probe.getLine(), probe.getEndColumn())
-                                        ),
-                                        probe.getResult().toString(),
-                                        "probeResult"
-                                ));
-                            }
-                            decorations.add(Decoration.create(
-                                    Range.create(
-                                            Position.create(example.getExampleDefinitionLine(), 0),
-                                            Position.create(example.getExampleDefinitionLine(), example.getExampleDefinitionEndColumn())
-                                    ),
-                                    example.getExampleResult().toString(),
-                                    "exampleResult"
-                            ));
-                            return decorations.stream();
-                        }).collect(Collectors.toList())
+                        .flatMap(example -> getListOfDecorationsForEvaluatedExample(example).stream()).collect(Collectors.toList())
                 )
                 .thenAccept(decorations -> client.publishDecorations(PublishDecorationsParams.create(uri.toString(), decorations)));
     }
