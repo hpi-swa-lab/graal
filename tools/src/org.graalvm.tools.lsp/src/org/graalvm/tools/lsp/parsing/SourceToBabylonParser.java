@@ -49,7 +49,8 @@ public class SourceToBabylonParser {
                     probes,
                     this.getExampleDefinitionLine(example[0]),
                     this.getExampleDefinitionEndColumn(example[0]),
-                    this.uri, probeMode));
+                    this.uri,
+                    probeMode));
         });
 
         return this.examples;
