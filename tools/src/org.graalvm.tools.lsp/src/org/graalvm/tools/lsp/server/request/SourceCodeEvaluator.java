@@ -235,7 +235,6 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
 
             List<EventBinding> eventBindingList = new ArrayList<>();
 
-            if (example.getProbeAll()) {
                 SourceSectionFilter sourceSectionFilter = SourceSectionFilter.
                         newBuilder().
                         tagIs(StandardTags.StatementTag.class).
@@ -249,14 +248,14 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
                     @Override
                     public void onReturnValue(EventContext context, VirtualFrame frame, Object result) {
                         SourceSection sourceSection = context.getInstrumentedSourceSection();
-                        ProbeDefinition probe = new ProbeDefinition(sourceSection.getStartLine());
-
-                        example.getProbes().add(probe);
-
-                        probe.setResult(result);
-                        probe.setUri(sourceSection.getSource().getName());
-                        probe.setStartColumn(sourceSection.getStartColumn() + 1);
-                        probe.setEndColumn(sourceSection.getEndColumn() + 1);
+                        String explicitProbeAnnotation = sourceSection.getSource().getCharacters(sourceSection.getStartLine() -1).toString();
+                        if ((example.getProbeAll() || explicitProbeAnnotation.trim().equals("// <Probe />"))) {
+                            ProbeDefinition probe = new ProbeDefinition(sourceSection.getStartLine());
+                            example.getProbes().add(probe);
+                            probe.setResult(result);
+                            probe.setStartColumn(sourceSection.getStartColumn());
+                            probe.setEndColumn(sourceSection.getEndColumn());
+                        }
                     }
 
                     @Override
@@ -264,40 +263,7 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
                         // Do nothing
                     }
                 }));
-            } else {
-                for (ProbeDefinition probe : example.getProbes()) {
-                    int line = probe.getLine();
 
-                    SourceSectionFilter sourceSectionFilter = SourceSectionFilter.
-                            newBuilder().
-                            lineIs(line).
-                            tagIs(StandardTags.StatementTag.class).
-                            build();
-
-                    eventBindingList.add(env.getInstrumenter().attachExecutionEventListener(sourceSectionFilter, new ExecutionEventListener() {
-                        @Override
-                        public void onEnter(EventContext context, VirtualFrame frame) {
-                            // Do nothing
-                        }
-
-                        @Override
-                        public void onReturnValue(EventContext context, VirtualFrame frame, Object result) {
-                            SourceSection sourceSection = context.getInstrumentedSourceSection();
-
-                            probe.setResult(result);
-                            probe.setUri(sourceSection.getSource().getName());
-                            probe.setStartColumn(sourceSection.getStartColumn() + 1);
-                            probe.setEndColumn(sourceSection.getEndColumn() + 1);
-                        }
-
-                        @Override
-                        public void onReturnExceptional(EventContext context, VirtualFrame frame, Throwable exception) {
-                            // Do nothing
-                        }
-                    }));
-
-                }
-            }
 
             Object exampleResult;
             try {
@@ -322,7 +288,6 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
 
         List<EventBinding<?>> eventBindingList = new ArrayList<>();
 
-        if (example.getProbeAll()) {
             SourceSectionFilter sourceSectionFilter = SourceSectionFilter.
                     newBuilder().
                     tagIs(StandardTags.StatementTag.class).
@@ -336,14 +301,14 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
                 @Override
                 public void onReturnValue(EventContext context, VirtualFrame frame, Object result) {
                     SourceSection sourceSection = context.getInstrumentedSourceSection();
-                    ProbeDefinition probe = new ProbeDefinition(sourceSection.getStartLine());
-
-                    example.getProbes().add(probe);
-
-                    probe.setResult(result);
-                    probe.setUri(sourceSection.getSource().getName());
-                    probe.setStartColumn(sourceSection.getStartColumn() + 1);
-                    probe.setEndColumn(sourceSection.getEndColumn() + 1);
+                    String explicitProbeAnnotation = sourceSection.getSource().getCharacters(sourceSection.getStartLine() -1).toString();
+                    if ((example.getProbeAll() || explicitProbeAnnotation.trim().equals("// <Probe />"))) {
+                        ProbeDefinition probe = new ProbeDefinition(sourceSection.getStartLine());
+                        example.getProbes().add(probe);
+                        probe.setResult(result);
+                        probe.setStartColumn(sourceSection.getStartColumn());
+                        probe.setEndColumn(sourceSection.getEndColumn());
+                    }
                 }
 
                 @Override
@@ -351,39 +316,6 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
                     // Do nothing
                 }
             }));
-        } else {
-            for (ProbeDefinition probe : example.getProbes()) {
-                int line = probe.getLine();
-
-                SourceSectionFilter sourceSectionFilter = SourceSectionFilter.
-                        newBuilder().
-                        tagIs(StandardTags.StatementTag.class).
-                        build();
-
-                eventBindingList.add(env.getInstrumenter().attachExecutionEventListener(sourceSectionFilter, new ExecutionEventListener() {
-                    @Override
-                    public void onEnter(EventContext context, VirtualFrame frame) {
-                        // Do nothing
-                    }
-
-                    @Override
-                    public void onReturnValue(EventContext context, VirtualFrame frame, Object result) {
-                        SourceSection sourceSection = context.getInstrumentedSourceSection();
-
-                        probe.setResult(result);
-                        probe.setUri(sourceSection.getSource().getName());
-                        probe.setStartColumn(sourceSection.getStartColumn() + 1);
-                        probe.setEndColumn(sourceSection.getEndColumn() + 1);
-                    }
-
-                    @Override
-                    public void onReturnExceptional(EventContext context, VirtualFrame frame, Throwable exception) {
-                        // Do nothing
-                    }
-                }));
-
-            }
-        }
 
         Object exampleResult;
         try {
