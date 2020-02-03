@@ -42,11 +42,9 @@ public class SourceToBabylonParser {
                 }
             }
             this.exampleInvocationCode = this.getExampleInvocationCode(lineNumber, exampleParameters, this.functionsInSource);
-            List<ProbeDefinition> probes = this.getProbesForExample(lineNumber, this.getFunctionEndLineNumber(lineNumber), probeMode);
             this.examples.add(new ExampleDefinition(example[0],
                     lineNumber,
                     this.exampleInvocationCode,
-                    probes,
                     this.getExampleDefinitionLine(example[0]),
                     this.getExampleDefinitionEndColumn(example[0]),
                     this.uri, probeMode));
@@ -78,15 +76,6 @@ public class SourceToBabylonParser {
         return exampleNamesToLineNumberAndParameterStrings;
     }
 
-    private Integer getFunctionEndLineNumber(Integer lineNumberStart) {
-
-        for (LanguageAgnosticFunctionDeclarationDefinition functionDef : this.functionsInSource) {
-            if (functionDef.getStartLine() == lineNumberStart) {
-                return functionDef.getEndLine();
-            }
-        }
-        return -1;
-    }
 
     private Integer getLineNumberOfFunctionDefForExample(String fullExampleString) {
         String[] lines = this.annotatedSource.split("\n");
@@ -157,22 +146,6 @@ public class SourceToBabylonParser {
         });
 
         return functionNameForExample + "(" + String.join(", ", argumentValues) + ")";
-    }
-
-    private Boolean needsExplicitProbe(String probeMode, String[] lines, Integer at) {
-        return ((!probeMode.equals("all") && lines[at].trim().equals("// <Probe />")));
-    }
-
-    private List<ProbeDefinition> getProbesForExample(Integer functionStart, Integer functionEnd, String probeMode) {
-        String[] lines = this.annotatedSource.split("\n");
-        ArrayList<ProbeDefinition> probes = new ArrayList<>();
-
-        for (int i = functionStart - 1; i < functionEnd; i++) {
-            if (lines[i].contains("<Probe />")) {
-                probes.add(new ProbeDefinition(i + 2));
-            }
-        }
-        return probes;
     }
 
 }
