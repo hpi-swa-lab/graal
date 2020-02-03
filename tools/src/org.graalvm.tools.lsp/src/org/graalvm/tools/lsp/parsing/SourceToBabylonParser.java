@@ -32,7 +32,12 @@ public class SourceToBabylonParser {
         Map<String, List<Object>> exampleNamesToLineNumberAndParameterStrings = new LinkedHashMap<>();
 
         this.readExamplesFromSource().forEach((example, lineNumberAndParameterStrings) -> {
-            String probeMode = example[1];
+            ExampleDefinition.ProbeMode probeMode = ExampleDefinition.ProbeMode.DEFAULT;
+            if (example[1].equals("all")) {
+                probeMode = ExampleDefinition.ProbeMode.ALL;
+            } else if (example[1].equals("off")) {
+                probeMode = ExampleDefinition.ProbeMode.OFF;
+            }
             int lineNumber = (Integer) lineNumberAndParameterStrings.keySet().toArray()[0];
             String parameterStrings = lineNumberAndParameterStrings.get(lineNumber);
             Map<String, Object> exampleParameters = new HashMap<>();
