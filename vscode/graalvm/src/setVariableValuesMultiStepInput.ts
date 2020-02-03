@@ -82,6 +82,7 @@ export default async function setVariableValuesMultiStepInput(
 			shouldResume: shouldResume
         });
         currentState.probeMode = pick.label;
+        // terminate here, if function has no variables
         if (currentState.variableQuickPicks.length === 0) {
             return undefined;
         }

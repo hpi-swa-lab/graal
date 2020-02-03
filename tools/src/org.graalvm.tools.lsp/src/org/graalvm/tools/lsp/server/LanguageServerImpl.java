@@ -405,7 +405,6 @@ public final class LanguageServerImpl extends LanguageServer {
             }
 
             if (inputMapping.has("variables")) {
-                System.out.print(("yey"));
                 inputMapping.getJSONObject("variables").toMap().forEach((key, value) -> {
                     builder.append(" ");
                     builder.append(key);
