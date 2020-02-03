@@ -16,7 +16,7 @@ interface ISetVariableValueQuickPickItem<T> extends QuickPickItem {
  */
 export default async function setVariableValuesMultiStepInput(
     inputMapping: IInputMapping
-): Promise<IInputMapping> {
+): Promise<IExampleMapping> {
     const FINISH_STRING = '› Finish';
 
     const variableQuickPicks: Array<ISetVariableValueQuickPickItem<
@@ -38,6 +38,8 @@ export default async function setVariableValuesMultiStepInput(
         totalSteps: number;
         selectedVariableQuickPick: ISetVariableValueQuickPickItem<any>;
         variableQuickPicks: Array<ISetVariableValueQuickPickItem<any>>;
+        exampleName: string;
+        probeMode: string;
         finished: boolean;
     }
 
@@ -46,11 +48,45 @@ export default async function setVariableValuesMultiStepInput(
             finished: false,
             variableQuickPicks,
         } as Partial<IState>;
-        await MultiStepInput.run(input => pickVariable(input, finalState));
+        await MultiStepInput.run(input => inputExampleName(input, finalState));
         return finalState as IState;
     }
 
-    const title = 'Enter values for example variables';
+    const title = 'Create an example for a function';
+
+    async function inputExampleName(input: MultiStepInput, currentState: Partial<IState>) {
+        currentState.exampleName = await input.showInputBox({
+            prompt: `Choose a name for the example`,
+            shouldResume,
+            step: 1,
+            title,
+            totalSteps: 4,
+            validate: validateExampleName,
+            value: typeof currentState.exampleName === 'string' ? currentState.exampleName : '',
+        });
+        return (input: MultiStepInput) => pickProbeMode(input, currentState);
+    }
+
+    const probeModes: QuickPickItem[] = [
+        ['default', 'Only return values and explicit probes'], ['all', 'All statements'], ['off', 'Disable probing']
+    ].map(entry => ({ label: entry[0], detail: entry[1] }));
+
+    async function pickProbeMode(input: MultiStepInput, currentState: Partial<IState>) {
+		const pick = await input.showQuickPick({
+			title,
+			step: 2,
+			totalSteps: 4,
+			placeholder: 'Pick a probe mode',
+			items: probeModes,
+			activeItem: typeof currentState.probeMode !== 'string' ? currentState.probeMode : undefined,
+			shouldResume: shouldResume
+        });
+        currentState.probeMode = pick.label;
+        if (currentState.variableQuickPicks.length === 0) {
+            return undefined;
+        }
+		return (input: MultiStepInput) => pickVariable(input, currentState);
+    }
 
     async function pickVariable(input: MultiStepInput, currentState: Partial<IState>) {
         const pick = await input.showQuickPick({
@@ -67,9 +103,9 @@ export default async function setVariableValuesMultiStepInput(
                 : currentState.variableQuickPicks,
             placeholder: 'Select a variable to set its value',
             shouldResume,
-            step: 1,
+            step: 3,
             title,
-            totalSteps: 2,
+            totalSteps: 3,
         });
         if (pick.label === FINISH_STRING) {
             return undefined;
@@ -84,9 +120,9 @@ export default async function setVariableValuesMultiStepInput(
         const newValue = await input.showInputBox({
             prompt: `Choose a value for the selected variable ${currentState.selectedVariableQuickPick.variableName} (${currentState.selectedVariableQuickPick.variableType})`,
             shouldResume,
-            step: 2,
+            step: 4,
             title,
-            totalSteps: 2,
+            totalSteps: 4,
             validate: (value: string) =>
                 validateVariableType(
                     value,
@@ -121,6 +157,11 @@ export default async function setVariableValuesMultiStepInput(
         // Could show a notification with the option to resume.
         return new Promise<boolean>(() => undefined);
     }
+
+    async function validateExampleName(name: string) {
+		// TODO: check if name is unique
+		return undefined;
+	}
 
     async function validateVariableType(value: string, type: string) {
         if (type === 'any') {
@@ -188,5 +229,11 @@ export default async function setVariableValuesMultiStepInput(
         variableNameValueMapping[quickPick.variableName] =
             quickPick.variableValue;
     });
-    return variableNameValueMapping;
+
+    const exampleMapping = {} as IExampleMapping;
+    exampleMapping.exampleName = state.exampleName;
+    exampleMapping.probeMode = state.probeMode;
+    exampleMapping.variables = variableNameValueMapping;
+
+    return exampleMapping;
 }

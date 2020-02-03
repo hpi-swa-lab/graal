@@ -166,14 +166,17 @@ function connectToLanguageServer(context: vscode.ExtensionContext) {
 				codeLenses.forEach(codeLens => {
 					const command = codeLens.command;
 
-					if (command.arguments.some(utils.isCommandExpectingUserInputArgument)) {
+					if (true) { // (command.arguments.some(utils.isCommandExpectingUserInputArgument)) {
 						const originalCommand = command.command;
-						const inputMapping = command.arguments.find(utils.isCommandExpectingUserInputArgument).inputMapping;
+						let inputMapping = {};
+						if (command.arguments.some(utils.isCommandExpectingUserInputArgument)) {
+							inputMapping = command.arguments.find(utils.isCommandExpectingUserInputArgument).inputMapping;
+						}
 						const replacementCommand = `${originalCommand}__ask-for-user-input__${index}`;
 						const replacementCommandHandler = () => {
 							const amountOfInputs = Object.keys(inputMapping).length;
 							const options: { [key: string]: (context: vscode.ExtensionContext) => Promise<any> } = {
-								[`Enter values for ${amountOfInputs} example variables…`]: () => setVariableValuesMultiStepInput(inputMapping),
+								[`Create example with ${amountOfInputs} variables`]: () => setVariableValuesMultiStepInput(inputMapping),
 							};
 							const quickPick = vscode.window.createQuickPick();
 							quickPick.items = Object.keys(options).map(label => ({ label }));
