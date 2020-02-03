@@ -13,7 +13,7 @@ public class ExampleDefinition {
     private String exampleName;
     private int functionStartLine;
     private String functionName;
-        private List<ProbeDefinition> probes;
+    private List<ProbeDefinition> probes;
     private ProbeMode probeMode;
     private Object exampleResult;
     private int exampleDefinitionLine;
