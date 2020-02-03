@@ -249,7 +249,8 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
                     public void onReturnValue(EventContext context, VirtualFrame frame, Object result) {
                         SourceSection sourceSection = context.getInstrumentedSourceSection();
                         String explicitProbeAnnotation = sourceSection.getSource().getCharacters(sourceSection.getStartLine() -1).toString();
-                        if ((example.getProbeAll() || explicitProbeAnnotation.trim().equals("// <Probe />"))) {
+                        if (example.getProbeMode() == ExampleDefinition.ProbeMode.ALL ||
+                            (example.getProbeMode() == ExampleDefinition.ProbeMode.DEFAULT && explicitProbeAnnotation.trim().equals("// <Probe />"))) {
                             ProbeDefinition probe = new ProbeDefinition(sourceSection.getStartLine());
                             example.getProbes().add(probe);
                             probe.setResult(result);
@@ -301,8 +302,9 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
                 @Override
                 public void onReturnValue(EventContext context, VirtualFrame frame, Object result) {
                     SourceSection sourceSection = context.getInstrumentedSourceSection();
-                    String explicitProbeAnnotation = sourceSection.getSource().getCharacters(sourceSection.getStartLine() -1).toString();
-                    if ((example.getProbeAll() || explicitProbeAnnotation.trim().equals("// <Probe />"))) {
+                    String explicitProbeAnnotation = sourceSection.getSource().getCharacters(sourceSection.getStartLine() - 1).toString();
+                    if (example.getProbeMode() == ExampleDefinition.ProbeMode.ALL ||
+                        (example.getProbeMode() == ExampleDefinition.ProbeMode.DEFAULT && explicitProbeAnnotation.trim().equals("// <Probe />"))) {
                         ProbeDefinition probe = new ProbeDefinition(sourceSection.getStartLine());
                         example.getProbes().add(probe);
                         probe.setResult(result);
