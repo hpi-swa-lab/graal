@@ -435,7 +435,7 @@ public final class LanguageServerImpl extends LanguageServer {
                 .thenAccept(decorationMaps -> {
                     Map<String, List<Decoration>> uriToMergedDecorationsMap = joinDecorationMaps(decorationMaps);
                     uriToMergedDecorationsMap.forEach((decorationsUri, decorations) -> {
-                        client.publishDecorations(PublishDecorationsParams.create(uri.toString(), decorations));
+                        client.publishDecorations(PublishDecorationsParams.create(decorationsUri, decorations));
                     });
                 });
     }
