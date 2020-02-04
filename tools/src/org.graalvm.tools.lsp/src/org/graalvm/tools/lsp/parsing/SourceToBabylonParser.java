@@ -37,7 +37,7 @@ public class SourceToBabylonParser {
             }
             int lineNumber = (Integer) lineNumberAndParameterStrings.keySet().toArray()[0];
             String parameterStrings = lineNumberAndParameterStrings.get(lineNumber);
-            Map<String, Object> exampleParameters = new HashMap<>();
+            Map<String, Object> exampleParameters = new LinkedHashMap<>();
             for (String substring : parameterStrings.split(" ")) {
                 if (!substring.equals("")) {
                     exampleParameters.put(substring.split("=")[0], substring.split("=")[1]);
@@ -57,11 +57,11 @@ public class SourceToBabylonParser {
     }
 
     private Map<String[], Map<Integer, String>> readExamplesFromSource() {
-        Map<String[], Map<Integer, String>> exampleNamesToLineNumberAndParameterStrings = new HashMap<>();
+        Map<String[], Map<Integer, String>> exampleNamesToLineNumberAndParameterStrings = new LinkedHashMap<>();
         Matcher m = Pattern.compile(exampleAnnotationPattern).matcher(this.annotatedSource);
         while (m.find()) {
             Integer lineNumberOfFunctionDefForExample = this.getLineNumberOfFunctionDefForExample(m.group());
-            Map<Integer, String> lineNumberToParameterStrings = new HashMap<>();
+            Map<Integer, String> lineNumberToParameterStrings = new LinkedHashMap<>();
             String probeMode = m.group("mode") != null ? m.group("mode") : "default";
             String exampleNameAssignment = m.group("nameAssign");
             String probeModeAssignment = m.group("probeAssign");
