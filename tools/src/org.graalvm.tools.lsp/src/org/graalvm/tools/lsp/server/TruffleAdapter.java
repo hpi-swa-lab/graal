@@ -161,12 +161,8 @@ public final class TruffleAdapter implements VirtualLanguageServerFileProvider {
         return contextAwareExecutor.executeWithDefaultContext(() -> exampleDefinitionsRequestHandler.exampleDefinitionsWithEnteredContext(uri, sourceCode));
     }
 
-    public Future<List<ExampleDefinition>> evaluateExamplesAndProbes(URI uri, List<ExampleDefinition> examples) {
-        return contextAwareExecutor.executeWithNestedContext(() -> sourceCodeEvaluator.evaluateExamplesAndProbes(uri, examples));
-    }
-
-    public Future<ExampleDefinition> evaluateExampleAndProbes(URI uri, ExampleDefinition example) {
-        return contextAwareExecutor.executeWithNestedContext(() -> sourceCodeEvaluator.evaluateExampleAndProbes(uri, example));
+    public Future<ExampleDefinition> evaluateProbesAndAssertionsForExample(URI uri, ExampleDefinition example) {
+        return contextAwareExecutor.executeWithNestedContext(() -> sourceCodeEvaluator.evaluateProbesAndAssertionsForExample(uri, example));
     }
 
     /**

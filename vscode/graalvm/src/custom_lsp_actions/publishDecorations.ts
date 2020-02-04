@@ -1,9 +1,12 @@
 'use strict';
 
-import { DecorationOptions, Position, Range, window, TextEditorDecorationType} from 'vscode';
+import { Position, Range, window, TextEditorDecorationType} from 'vscode';
 // import NamedDisposable from '../utils/namedDisposable';
 
 export const PUBLISH_DECORATIONS_REQUEST: string = "custom/publishDecorations";
+const PROBE_DECORATION_TYPE = "PROBE_DECORATION";
+const ASSERTION_DECORATION_TYPE = "ASSERTION_DECORATION";
+const EXAMPLE_DECORATION_TYPE = "EXAMPLE_DECORATION";
 
 const parseRangeFromGraal = ({
 	start: {
@@ -20,7 +23,7 @@ const parseRangeFromGraal = ({
 	new Position(endLine - 1, endCharacter)
 );
 
-const explicitDefaultDecorationType: TextEditorDecorationType = window.createTextEditorDecorationType({
+const probeDecorationType: TextEditorDecorationType = window.createTextEditorDecorationType({
 	after: {
 		color: "white",
 		backgroundColor: "#4e7ec2",
@@ -28,18 +31,29 @@ const explicitDefaultDecorationType: TextEditorDecorationType = window.createTex
 	},
 });
 
-function explicitDecorationStyleForType(type: string): object {
-	const styleForType = {
-		"probeResult": {
-			backgroundColor: "#4e7ec2"
-		},
-		"exampleResult": {
-			backgroundColor: "#636360"
-		}
-	};
+const assertionDecorationType: TextEditorDecorationType = window.createTextEditorDecorationType({
+	after: {
+		color: "white",
+		margin: "1rem",
+	},
+});
 
-	return styleForType[type] || {};
-}
+const exampleDecorationType: TextEditorDecorationType = window.createTextEditorDecorationType({
+	after: {
+		color: "white",
+		backgroundColor: "#636360",
+		margin: "1rem",
+	},
+});
+
+const buildDecorationOption = ({range, decorationText}) => ({
+	range,
+	renderOptions: {
+		after: {
+			contentText: `\u202F${decorationText}\u202F`,
+		},
+	},
+});
 
 export function publishDecorations({ uri, decorations }): void {
 	console.debug('received new decorations');
@@ -49,40 +63,54 @@ export function publishDecorations({ uri, decorations }): void {
 	const openEditor = window.visibleTextEditors.filter(editor => editor.document.fileName === fileName)[0];
 
 	decorations = decorations.map(
-		({range: rangeParams, decorationText, type}) => ({range: parseRangeFromGraal(rangeParams), decorationText, type})
+		({range: rangeParams, decorationType, decorationText}) => ({range: parseRangeFromGraal(rangeParams), decorationType, decorationText})
 	);
 	decorations.forEach(decoration => console.debug(
 		decoration.decorationText,
+		decoration.decorationType,
 		decoration.range.start.line,
 		decoration.range.start.character,
 		decoration.range.end.line,
 		decoration.range.end.character
 	));
 
+	// combine decorations if there are multiple decorations per line
 	decorations = decorations.reduce((decorationsAccumulator, newDecoration) => {
 		let existingDecorationWithSameRange = decorationsAccumulator.find(existingDecoration => existingDecoration.range.isEqual(newDecoration.range));
 
 		if (existingDecorationWithSameRange) {
 			existingDecorationWithSameRange.decorationText += `, ${newDecoration.decorationText}`;
 		} else {
-			existingDecorationWithSameRange = newDecoration;
-			decorationsAccumulator.push(existingDecorationWithSameRange);
+			decorationsAccumulator.push(newDecoration);
 		}
 		return decorationsAccumulator;
 	}, []);
 
-	const decorationOptionsArray: DecorationOptions[] = decorations.map(({range, decorationText, type}) => ({
-		range,
-		renderOptions: {
-			after: {
-				...explicitDecorationStyleForType(type),
-				contentText: ` ${decorationText} `
-			}
-		}
-	}));
+	const probeDecorations = decorations.filter(decoration => decoration.decorationType === PROBE_DECORATION_TYPE);
+	const assertionDecorations = decorations
+		.filter(decoration => decoration.decorationType === ASSERTION_DECORATION_TYPE)
+		// replace "true"/"false" strings with emojis
+		.map(({range, decorationText}) => {
+			decorationText = decorationText
+				.split(", ")
+				.map(assertionResult => assertionResult === "true" ? "\u2705" : "\u274c")
+				.join(", ");
+			return {range, decorationText};
+		});
+	const exampleDecorations = decorations.filter(decoration => decoration.decorationType === EXAMPLE_DECORATION_TYPE);
 
 	openEditor.setDecorations(
-		explicitDefaultDecorationType,
-		decorationOptionsArray
+		probeDecorationType,
+		probeDecorations.map(buildDecorationOption)
+	);
+
+	openEditor.setDecorations(
+		assertionDecorationType,
+		assertionDecorations.map(buildDecorationOption)
+	);
+
+	openEditor.setDecorations(
+		exampleDecorationType,
+		exampleDecorations.map(buildDecorationOption)
 	);
 }

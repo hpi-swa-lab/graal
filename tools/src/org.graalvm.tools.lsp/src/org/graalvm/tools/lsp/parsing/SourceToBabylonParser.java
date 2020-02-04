@@ -1,9 +1,6 @@
 package org.graalvm.tools.lsp.parsing;
 
-import org.graalvm.tools.lsp.definitions.ExampleDefinition;
-import org.graalvm.tools.lsp.definitions.LanguageAgnosticFunctionArgumentDefinition;
-import org.graalvm.tools.lsp.definitions.LanguageAgnosticFunctionDeclarationDefinition;
-import org.graalvm.tools.lsp.definitions.ProbeDefinition;
+import org.graalvm.tools.lsp.definitions.*;
 
 import java.util.*;
 import java.util.regex.Matcher;
@@ -38,15 +35,13 @@ public class SourceToBabylonParser {
             Map<String, Object> exampleParameters = new HashMap<>();
             for (String substring : parameterStrings.split(" ")) {
                 if (!substring.equals("")) {
-                    exampleParameters.put(substring.split("=")[0], substring.split("=")[1].replace(",", ""));
+                    exampleParameters.put(substring.split("=")[0], substring.split("=")[1]);
                 }
             }
             this.exampleInvocationCode = this.getExampleInvocationCode(lineNumber, exampleParameters, this.functionsInSource);
-            List<ProbeDefinition> probes = this.getProbesForExample(lineNumber, this.getFunctionEndLineNumber(lineNumber), probeMode);
             this.examples.add(new ExampleDefinition(example[0],
                     lineNumber,
                     this.exampleInvocationCode,
-                    probes,
                     this.getExampleDefinitionLine(example[0]),
                     this.getExampleDefinitionEndColumn(example[0]),
                     this.uri, probeMode));
@@ -76,16 +71,6 @@ public class SourceToBabylonParser {
             lineNumberToParameterStrings.put(lineNumberOfFunctionDefForExample, parameterString);
         }
         return exampleNamesToLineNumberAndParameterStrings;
-    }
-
-    private Integer getFunctionEndLineNumber(Integer lineNumberStart) {
-
-        for (LanguageAgnosticFunctionDeclarationDefinition functionDef : this.functionsInSource) {
-            if (functionDef.getStartLine() == lineNumberStart) {
-                return functionDef.getEndLine();
-            }
-        }
-        return -1;
     }
 
     private Integer getLineNumberOfFunctionDefForExample(String fullExampleString) {
@@ -159,20 +144,29 @@ public class SourceToBabylonParser {
         return functionNameForExample + "(" + String.join(", ", argumentValues) + ")";
     }
 
-    private Boolean needsExplicitProbe(String probeMode, String[] lines, Integer at) {
-        return ((!probeMode.equals("all") && lines[at].trim().equals("// <Probe />")));
-    }
 
-    private List<ProbeDefinition> getProbesForExample(Integer functionStart, Integer functionEnd, String probeMode) {
-        String[] lines = this.annotatedSource.split("\n");
-        ArrayList<ProbeDefinition> probes = new ArrayList<>();
+    // TODO: get rid of this once guest language context is easier to access
+    public static Object convertExpectedValueType(String expectedValue) {
+        if (expectedValue.startsWith("\"") && expectedValue.endsWith("\"")) {
+            return expectedValue.substring(1, expectedValue.length() - 1);
+        }
 
-        for (int i = functionStart - 1; i < functionEnd; i++) {
-            if (lines[i].contains("<Probe />")) {
-                probes.add(new ProbeDefinition(i + 2));
+        try {
+            return Integer.parseInt(expectedValue);
+        } catch (NumberFormatException e) {
+            try {
+                return Double.parseDouble(expectedValue);
+            } catch (NumberFormatException ex) {
+                // TODO: language-specific (issue #61)
+                if (expectedValue.equals("true") || expectedValue.equals("True")) {
+                    return true;
+                } else if (expectedValue.equals("false") || expectedValue.equals("False")) {
+                    return false;
+                } else {
+                    return expectedValue;
+                }
             }
         }
-        return probes;
     }
 
 }
