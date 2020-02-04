@@ -144,23 +144,6 @@ public class SourceToBabylonParser {
         return functionNameForExample + "(" + String.join(", ", argumentValues) + ")";
     }
 
-    public int getLineNumberOfAssertedStatement(String assertionString) {
-        String[] lines = this.annotatedSource.split("\n");
-        boolean found = false;
-
-        for (int i = 0; i < lines.length; i++) {
-            if (lines[i].contains(assertionString)) {
-                found = true;
-            }
-            if (found) {
-                if (!lines[i].contains("<Assertion")) {
-                    return i;
-                }
-            }
-        }
-
-        return -1;
-    }
 
     // TODO: get rid of this once guest language context is easier to access
     public static Object convertExpectedValueType(String expectedValue) {
