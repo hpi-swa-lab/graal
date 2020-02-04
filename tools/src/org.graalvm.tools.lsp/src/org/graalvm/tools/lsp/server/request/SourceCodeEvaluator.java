@@ -285,6 +285,7 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
                             AssertionDefinition assertion = new AssertionDefinition(sourceSection.getStartLine(), expectedValueObject);
                             example.getAssertions().add(assertion);
                             assertion.setResult(result);
+                            assertion.setUri(uri);
                             assertion.setStartColumn(sourceSection.getStartColumn());
                             assertion.setEndColumn(sourceSection.getEndColumn());
                         }
@@ -303,7 +304,6 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
         } catch (Exception e) {
             exampleResult = e.getMessage();
         }
-
         example.setExampleResult(exampleResult);
 
         eventBindingList.forEach(EventBinding::dispose);
