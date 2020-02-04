@@ -334,37 +334,83 @@ public final class LanguageServerImpl extends LanguageServer {
         return CompletableFuture.completedFuture(Collections.emptyList());
     }
 
-    private List<Decoration> getListOfDecorationsForEvaluatedExample(ExampleDefinition example) {
-        ArrayList<Decoration> decorations = new ArrayList<>();
+    private Map<String, List<Decoration>> getMapOfDecorationsForEvaluatedExample(ExampleDefinition example) {
+        Map<String, List<Decoration>> uriToDecorationsMap = new HashMap<>();
+
         for (ProbeDefinition probe : example.getProbes()) {
-            decorations.add(Decoration.create(
+            List<Decoration> existingDecorations = uriToDecorationsMap.get(probe.getUri());
+            Decoration newDecoration = Decoration.create(
                     Range.create(
                             Position.create(probe.getLine(), probe.getStartColumn()),
                             Position.create(probe.getLine(), probe.getEndColumn())
                     ),
-                    probe.getResult().toString(),
+                    probe.getResult() != null ? probe.getResult().toString() : "null",
                     Decoration.PROBE_DECORATION_TYPE
-            ));
+            );
+            if (existingDecorations != null) {
+                existingDecorations.add(newDecoration);
+            } else {
+                List<Decoration> decorationsList = new ArrayList<>();
+                decorationsList.add(newDecoration);
+                uriToDecorationsMap.put(probe.getUri(), decorationsList);
+            }
         }
-        decorations.add(Decoration.create(
-                Range.create(
-                        Position.create(example.getExampleDefinitionLine(), 0),
-                        Position.create(example.getExampleDefinitionLine(), example.getExampleDefinitionEndColumn())
-                ),
-                example.getExampleResult().toString(),
-                Decoration.EXAMPLE_DECORATION_TYPE
-        ));
+
         for (AssertionDefinition assertion : example.getAssertions()) {
-            decorations.add(Decoration.create(
+            List<Decoration> existingDecorations = uriToDecorationsMap.get(assertion.getUri());
+            Decoration newDecoration = Decoration.create(
                     Range.create(
                             Position.create(assertion.getLine(), assertion.getStartColumn()),
                             Position.create(assertion.getLine(), assertion.getEndColumn())
                     ),
                     Boolean.toString(assertion.isAssertionTrue()),
                     Decoration.ASSERTION_DECORATION_TYPE
-            ));
+            );
+            if (existingDecorations != null) {
+                existingDecorations.add(newDecoration);
+            } else {
+                List<Decoration> decorationsList = new ArrayList<>();
+                decorationsList.add(newDecoration);
+                uriToDecorationsMap.put(assertion.getUri(), decorationsList);
+            }
         }
-        return decorations;
+
+        List<Decoration> existingDecorations = uriToDecorationsMap.get(example.getUri());
+        Decoration newDecoration = Decoration.create(
+                Range.create(
+                        Position.create(example.getExampleDefinitionLine(), 0),
+                        Position.create(example.getExampleDefinitionLine(), example.getExampleDefinitionEndColumn())
+                ),
+                example.getExampleResult() != null ? example.getExampleResult().toString() : "null",
+                Decoration.EXAMPLE_DECORATION_TYPE
+        );
+        if (existingDecorations != null) {
+            existingDecorations.add(newDecoration);
+        } else {
+            List<Decoration> decorationsList = new ArrayList<>();
+            decorationsList.add(newDecoration);
+            uriToDecorationsMap.put(example.getUri(), decorationsList);
+        }
+
+        return uriToDecorationsMap;
+    }
+
+    private Map<String, List<Decoration>> joinDecorationMaps(List<Map<String, List<Decoration>>> decorationMaps) {
+        Map<String, List<Decoration>> uriToDecorationsMap = new HashMap<>();
+
+        for (Map<String, List<Decoration>> decorationMap : decorationMaps) {
+            decorationMap.forEach((uri, decorations) -> {
+                List<Decoration> existingDecorations = uriToDecorationsMap.get(uri);
+                if (existingDecorations != null) {
+                    existingDecorations.addAll(decorations);
+                } else {
+                    List<Decoration> decorationsList = new ArrayList<>(decorations);
+                    uriToDecorationsMap.put(uri, decorationsList);
+                }
+            });
+        }
+
+        return uriToDecorationsMap;
     }
 
     private void extractAndEvaluateExamples(URI uri, String sourceCode) {
@@ -383,9 +429,15 @@ public final class LanguageServerImpl extends LanguageServer {
         CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
                 .thenApply(ignored -> futures.stream()
                         .map(CompletableFuture::join)
-                        .flatMap(example -> getListOfDecorationsForEvaluatedExample(example).stream()).collect(Collectors.toList())
+                        .map(this::getMapOfDecorationsForEvaluatedExample)
+                        .collect(Collectors.toList())
                 )
-                .thenAccept(decorations -> client.publishDecorations(PublishDecorationsParams.create(uri.toString(), decorations)));
+                .thenAccept(decorationMaps -> {
+                    Map<String, List<Decoration>> uriToMergedDecorationsMap = joinDecorationMaps(decorationMaps);
+                    uriToMergedDecorationsMap.forEach((decorationsUri, decorations) -> {
+                        client.publishDecorations(PublishDecorationsParams.create(uri.toString(), decorations));
+                    });
+                });
     }
 
     private String buildExampleStringFromArgs(Boolean functionAlreadyHasExamples, int indexOfNewlyCreatedExamples, JSONObject inputMappingObject) {
