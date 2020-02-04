@@ -283,7 +283,7 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
                         Object expectedValueObject = SourceToBabylonParser.convertExpectedValueType(expectedValue);
                         AssertionDefinition assertion = new AssertionDefinition(sourceSection.getStartLine(), expectedValueObject);
                         example.getAssertions().add(assertion);
-                        assertion.setResult(result);
+                        assertion.setResult(example.getUniqueEmoji() + result);
                         assertion.setUri(uri);
                         assertion.setStartColumn(sourceSection.getStartColumn());
                         assertion.setEndColumn(sourceSection.getEndColumn());
@@ -302,7 +302,7 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
         } catch (Exception e) {
             exampleResult = e.getMessage();
         }
-        example.setExampleResult(exampleResult);
+        example.setExampleResult(example.getUniqueEmoji() + exampleResult);
 
         eventBindingList.forEach(EventBinding::dispose);
 
