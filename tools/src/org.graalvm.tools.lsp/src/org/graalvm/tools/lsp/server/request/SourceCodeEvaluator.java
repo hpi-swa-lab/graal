@@ -150,7 +150,7 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
     }
 
     private Map<SourceSection, LanguageAgnosticFunctionDeclarationDefinition> getFunctionDeclarations(SourceSectionFilter.SourcePredicate srcPredicate, URI uri) {
-        Map<SourceSection, LanguageAgnosticFunctionDeclarationDefinition> functionDeclarations = new HashMap<>();
+        Map<SourceSection, LanguageAgnosticFunctionDeclarationDefinition> functionDeclarations = new LinkedHashMap<>();
         SourceSectionFilter filter = SourceSectionFilter.newBuilder().sourceIs(srcPredicate).build();
         env.getInstrumenter().visitLoadedSourceSections(filter, event -> {
             Node node = event.getNode();
@@ -266,7 +266,7 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
                         (example.getProbeMode() == ExampleDefinition.ProbeMode.DEFAULT && explicitProbeAnnotation.trim().equals("// <Probe />"))) {
                         ProbeDefinition probe = new ProbeDefinition(sourceSection.getStartLine());
                         example.getProbes().add(probe);
-                        probe.setResult(result);
+                        probe.setResult(example.getUniqueEmoji() + result);
                         probe.setUri(uri);
                         probe.setStartColumn(sourceSection.getStartColumn());
                         probe.setEndColumn(sourceSection.getEndColumn());

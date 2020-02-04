@@ -159,7 +159,7 @@ export default async function setVariableValuesMultiStepInput(
         return new Promise<boolean>(() => undefined);
     }
 
-    async function validateExampleName(name: string) {
+    async function validateExampleName() {
 		// TODO: check if name is unique
 		return undefined;
 	}
