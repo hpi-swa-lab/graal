@@ -1,9 +1,6 @@
 package org.graalvm.tools.lsp.parsing;
 
-import org.graalvm.tools.lsp.definitions.ExampleDefinition;
-import org.graalvm.tools.lsp.definitions.LanguageAgnosticFunctionArgumentDefinition;
-import org.graalvm.tools.lsp.definitions.LanguageAgnosticFunctionDeclarationDefinition;
-import org.graalvm.tools.lsp.definitions.ProbeDefinition;
+import org.graalvm.tools.lsp.definitions.*;
 
 import java.util.*;
 import java.util.regex.Matcher;
@@ -43,7 +40,7 @@ public class SourceToBabylonParser {
             Map<String, Object> exampleParameters = new HashMap<>();
             for (String substring : parameterStrings.split(" ")) {
                 if (!substring.equals("")) {
-                    exampleParameters.put(substring.split("=")[0], substring.split("=")[1].replace(",", ""));
+                    exampleParameters.put(substring.split("=")[0], substring.split("=")[1]);
                 }
             }
             this.exampleInvocationCode = this.getExampleInvocationCode(lineNumber, exampleParameters, this.functionsInSource);
@@ -81,7 +78,6 @@ public class SourceToBabylonParser {
         }
         return exampleNamesToLineNumberAndParameterStrings;
     }
-
 
     private Integer getLineNumberOfFunctionDefForExample(String fullExampleString) {
         String[] lines = this.annotatedSource.split("\n");
@@ -154,4 +150,27 @@ public class SourceToBabylonParser {
         return functionNameForExample + "(" + String.join(", ", argumentValues) + ")";
     }
 
+    public static Object convertExpectedValueType(String expectedValue) {
+        // TODO: get rid of this once guest language context is easier to access
+        if (expectedValue.startsWith("\"") && expectedValue.endsWith("\"")) {
+            return expectedValue.substring(1, expectedValue.length() - 1);
+        }
+
+        try {
+            return Integer.parseInt(expectedValue);
+        } catch (NumberFormatException e) {
+            try {
+                return Double.parseDouble(expectedValue);
+            } catch (NumberFormatException ex) {
+                // TODO: language-specific (issue #61)
+                if (expectedValue.equals("true") || expectedValue.equals("True")) {
+                    return true;
+                } else if (expectedValue.equals("false") || expectedValue.equals("False")) {
+                    return false;
+                } else {
+                    return expectedValue;
+                }
+            }
+        }
+    }
 }

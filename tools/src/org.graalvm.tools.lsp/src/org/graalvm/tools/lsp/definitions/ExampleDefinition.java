@@ -15,6 +15,7 @@ public class ExampleDefinition {
     private String functionName;
     private List<ProbeDefinition> probes;
     private ProbeMode probeMode;
+    private List<AssertionDefinition> assertions;
     private Object exampleResult;
     private int exampleDefinitionLine;
     private int exampleDefinitionEndColumn;
@@ -32,6 +33,7 @@ public class ExampleDefinition {
         this.functionName = functionName;
         this.probes = new ArrayList<>();
         this.probeMode = probeMode;
+        this.assertions = new ArrayList<>();
         this.exampleDefinitionLine = exampleDefinitionLine;
         this.exampleDefinitionEndColumn = exampleDefinitionEndColumn;
         this.uri = uri;
@@ -55,6 +57,10 @@ public class ExampleDefinition {
 
     public ProbeMode getProbeMode() {
         return probeMode;
+    }
+
+    public List<AssertionDefinition> getAssertions() {
+        return this.assertions;
     }
 
     public Object getExampleResult() {
