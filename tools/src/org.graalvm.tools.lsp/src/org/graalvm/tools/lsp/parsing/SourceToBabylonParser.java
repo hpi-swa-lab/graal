@@ -39,13 +39,9 @@ public class SourceToBabylonParser {
                 }
             }
             this.exampleInvocationCode = this.getExampleInvocationCode(lineNumber, exampleParameters, this.functionsInSource);
-            List<ProbeDefinition> probes = this.getProbesForExample(lineNumber, this.getFunctionEndLineNumber(lineNumber), probeMode);
-            List<AssertionDefinition> assertions = this.getAssertionsForExample(example[0]);
             this.examples.add(new ExampleDefinition(example[0],
                     lineNumber,
                     this.exampleInvocationCode,
-                    probes,
-                    assertions,
                     this.getExampleDefinitionLine(example[0]),
                     this.getExampleDefinitionEndColumn(example[0]),
                     this.uri, probeMode));
@@ -75,16 +71,6 @@ public class SourceToBabylonParser {
             lineNumberToParameterStrings.put(lineNumberOfFunctionDefForExample, parameterString);
         }
         return exampleNamesToLineNumberAndParameterStrings;
-    }
-
-    private Integer getFunctionEndLineNumber(Integer lineNumberStart) {
-
-        for (LanguageAgnosticFunctionDeclarationDefinition functionDef : this.functionsInSource) {
-            if (functionDef.getStartLine() == lineNumberStart) {
-                return functionDef.getEndLine();
-            }
-        }
-        return -1;
     }
 
     private Integer getLineNumberOfFunctionDefForExample(String fullExampleString) {
@@ -176,39 +162,8 @@ public class SourceToBabylonParser {
         return -1;
     }
 
-    private List<ProbeDefinition> getProbesForExample(Integer functionStart, Integer functionEnd, String probeMode) {
-        String[] lines = this.annotatedSource.split("\n");
-        ArrayList<ProbeDefinition> probes = new ArrayList<>();
-
-        for (int i = functionStart - 1; i < functionEnd; i++) {
-            if (lines[i].contains("<Probe />")) {
-                probes.add(new ProbeDefinition(i + 2));
-            }
-        }
-        return probes;
-    }
-
-    private List<AssertionDefinition> getAssertionsForExample(String exampleName) {
-        ArrayList<AssertionDefinition> assertions = new ArrayList<>();
-
-        String assertionAnnotationPattern = "<(Assertion[a-zA-Z0-9_]*) (.*)\\/>";
-        Matcher m = Pattern.compile(assertionAnnotationPattern).matcher(this.annotatedSource);
-        while (m.find()) {
-            int assertedStatementLineNumber = this.getLineNumberOfAssertedStatement(m.group());
-            String exampleForAssertion = m.group(2).trim().split(" ")[0].split("=")[1];
-            if (!exampleName.equals(exampleForAssertion)) {
-                continue;
-            }
-            String expectedValue = m.group(2).trim().split(" ")[1].split("=")[1];
-            Object expectedValueObject = convertExpectedValueType(expectedValue);
-            assertions.add(new AssertionDefinition(assertedStatementLineNumber + 1, expectedValueObject));
-        }
-
-        return assertions;
-    }
-
     // TODO: get rid of this once guest language context is easier to access
-    private Object convertExpectedValueType(String expectedValue) {
+    public static Object convertExpectedValueType(String expectedValue) {
         if (expectedValue.startsWith("\"") && expectedValue.endsWith("\"")) {
             return expectedValue.substring(1, expectedValue.length() - 1);
         }
