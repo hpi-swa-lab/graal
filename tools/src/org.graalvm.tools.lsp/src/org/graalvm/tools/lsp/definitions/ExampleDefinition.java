@@ -1,5 +1,6 @@
 package org.graalvm.tools.lsp.definitions;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class ExampleDefinition {
@@ -17,16 +18,14 @@ public class ExampleDefinition {
     public ExampleDefinition(String exampleName,
                              int functionStartLine,
                              String functionName,
-                             List<ProbeDefinition> probes,
-                             List<AssertionDefinition> assertions,
                              int exampleDefinitionLine,
                              int exampleDefinitionEndColumn,
                              String uri, String probeMode) {
         this.exampleName = exampleName;
         this.functionStartLine = functionStartLine;
         this.functionName = functionName;
-        this.probes = probes;
-        this.assertions = assertions;
+        this.probes = new ArrayList<>();
+        this.assertions = new ArrayList<>();
         this.probeAll = (probeMode.equals("all"));
         this.exampleDefinitionLine = exampleDefinitionLine;
         this.exampleDefinitionEndColumn = exampleDefinitionEndColumn;
