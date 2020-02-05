@@ -444,7 +444,7 @@ public final class LanguageServerImpl extends LanguageServer {
         StringBuilder builder = new StringBuilder();
 
         if (!functionAlreadyHasExamples) {
-            builder.append("/* Example\n");
+            builder.append("/* Examples\n");
         }
         builder.append(" * <Example");
 
