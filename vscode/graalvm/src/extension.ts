@@ -165,41 +165,41 @@ function connectToLanguageServer(context: vscode.ExtensionContext) {
 
 				codeLenses.forEach(codeLens => {
 					const command = codeLens.command;
-
+					const originalCommand = command.command;
+					let inputMapping = {};
 					if (command.arguments.some(utils.isCommandExpectingUserInputArgument)) {
-						const originalCommand = command.command;
-						const inputMapping = command.arguments.find(utils.isCommandExpectingUserInputArgument).inputMapping;
-						const replacementCommand = `${originalCommand}__ask-for-user-input__${index}`;
-						const replacementCommandHandler = () => {
-							const amountOfInputs = Object.keys(inputMapping).length;
-							const options: { [key: string]: (context: vscode.ExtensionContext) => Promise<any> } = {
-								[`Enter values for ${amountOfInputs} example variables…`]: () => setVariableValuesMultiStepInput(inputMapping),
-							};
-							const quickPick = vscode.window.createQuickPick();
-							quickPick.items = Object.keys(options).map(label => ({ label }));
-							quickPick.onDidChangeSelection(selection => {
-								if (selection[0]) {
-									options[selection[0].label](context)
-										.then((inputMapping?: IInputMapping) => vscode.commands.executeCommand(originalCommand, {
-											...command.arguments.reduce((object, argument) => {
-												return {
-													...object,
-													...argument,
-												};
-											}, {}), inputMapping
-										}))
-										// tslint:disable-next-line: no-console
-										.catch(console.error);
-								}
-							});
-							quickPick.onDidHide(() => quickPick.dispose());
-							quickPick.show();
-						};
-						const disposable: vscode.Disposable = vscode.commands.registerCommand(replacementCommand, replacementCommandHandler);
-						context.subscriptions.push(new utils.NamedDisposable(disposable, replacementCommand));
-						command.command = replacementCommand;
-						index++;
+						inputMapping = command.arguments.find(utils.isCommandExpectingUserInputArgument).inputMapping;
 					}
+					const replacementCommand = `${originalCommand}__ask-for-user-input__${index}`;
+					const replacementCommandHandler = () => {
+						const amountOfInputs = Object.keys(inputMapping).length;
+						const options: { [key: string]: (context: vscode.ExtensionContext) => Promise<any> } = {
+							[`Create example with ${amountOfInputs} variables`]: () => setVariableValuesMultiStepInput(inputMapping),
+						};
+						const quickPick = vscode.window.createQuickPick();
+						quickPick.items = Object.keys(options).map(label => ({ label }));
+						quickPick.onDidChangeSelection(selection => {
+							if (selection[0]) {
+								options[selection[0].label](context)
+									.then((inputMapping?: IInputMapping) => vscode.commands.executeCommand(originalCommand, {
+										...command.arguments.reduce((object, argument) => {
+											return {
+												...object,
+												...argument,
+											};
+										}, {}), inputMapping
+									}))
+									// tslint:disable-next-line: no-console
+									.catch(console.error);
+							}
+						});
+						quickPick.onDidHide(() => quickPick.dispose());
+						quickPick.show();
+					};
+					const disposable: vscode.Disposable = vscode.commands.registerCommand(replacementCommand, replacementCommandHandler);
+					context.subscriptions.push(new utils.NamedDisposable(disposable, replacementCommand));
+					command.command = replacementCommand;
+					index++;
 				});
 
 				return codeLenses;

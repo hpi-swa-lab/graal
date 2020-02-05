@@ -4,12 +4,18 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class ExampleDefinition {
+    public enum ProbeMode {
+        DEFAULT,
+        ALL,
+        OFF
+    }
+
     private String exampleName;
     private int functionStartLine;
     private String functionName;
     private List<ProbeDefinition> probes;
+    private ProbeMode probeMode;
     private List<AssertionDefinition> assertions;
-    private Boolean probeAll;
     private Object exampleResult;
     private int exampleDefinitionLine;
     private int exampleDefinitionEndColumn;
@@ -20,13 +26,14 @@ public class ExampleDefinition {
                              String functionName,
                              int exampleDefinitionLine,
                              int exampleDefinitionEndColumn,
-                             String uri, String probeMode) {
+                             String uri,
+                             ProbeMode probeMode) {
         this.exampleName = exampleName;
         this.functionStartLine = functionStartLine;
         this.functionName = functionName;
         this.probes = new ArrayList<>();
+        this.probeMode = probeMode;
         this.assertions = new ArrayList<>();
-        this.probeAll = (probeMode.equals("all"));
         this.exampleDefinitionLine = exampleDefinitionLine;
         this.exampleDefinitionEndColumn = exampleDefinitionEndColumn;
         this.uri = uri;
@@ -48,12 +55,12 @@ public class ExampleDefinition {
         return this.probes;
     }
 
-    public List<AssertionDefinition> getAssertions() {
-        return this.assertions;
+    public ProbeMode getProbeMode() {
+        return probeMode;
     }
 
-    public Boolean getProbeAll() {
-        return probeAll;
+    public List<AssertionDefinition> getAssertions() {
+        return this.assertions;
     }
 
     public Object getExampleResult() {

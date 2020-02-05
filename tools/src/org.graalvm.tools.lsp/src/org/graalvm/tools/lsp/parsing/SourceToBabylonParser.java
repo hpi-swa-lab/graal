@@ -29,7 +29,12 @@ public class SourceToBabylonParser {
         Map<String, List<Object>> exampleNamesToLineNumberAndParameterStrings = new LinkedHashMap<>();
 
         this.readExamplesFromSource().forEach((example, lineNumberAndParameterStrings) -> {
-            String probeMode = example[1];
+            ExampleDefinition.ProbeMode probeMode = ExampleDefinition.ProbeMode.DEFAULT;
+            if (example[1].equals("all")) {
+                probeMode = ExampleDefinition.ProbeMode.ALL;
+            } else if (example[1].equals("off")) {
+                probeMode = ExampleDefinition.ProbeMode.OFF;
+            }
             int lineNumber = (Integer) lineNumberAndParameterStrings.keySet().toArray()[0];
             String parameterStrings = lineNumberAndParameterStrings.get(lineNumber);
             Map<String, Object> exampleParameters = new HashMap<>();
@@ -44,7 +49,8 @@ public class SourceToBabylonParser {
                     this.exampleInvocationCode,
                     this.getExampleDefinitionLine(example[0]),
                     this.getExampleDefinitionEndColumn(example[0]),
-                    this.uri, probeMode));
+                    this.uri,
+                    probeMode));
         });
 
         return this.examples;
@@ -144,9 +150,8 @@ public class SourceToBabylonParser {
         return functionNameForExample + "(" + String.join(", ", argumentValues) + ")";
     }
 
-
-    // TODO: get rid of this once guest language context is easier to access
     public static Object convertExpectedValueType(String expectedValue) {
+        // TODO: get rid of this once guest language context is easier to access
         if (expectedValue.startsWith("\"") && expectedValue.endsWith("\"")) {
             return expectedValue.substring(1, expectedValue.length() - 1);
         }
@@ -168,5 +173,4 @@ public class SourceToBabylonParser {
             }
         }
     }
-
 }

@@ -249,7 +249,6 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
                 @Override
                 public void onReturnValue(EventContext context, VirtualFrame frame, Object result) {
                     SourceSection sourceSection = context.getInstrumentedSourceSection();
-
                     String uri = sourceSection.getSource().getName();
 
                     if (result == null) {
@@ -263,7 +262,8 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
 
 
                     String explicitProbeAnnotation = sourceSection.getSource().getCharacters(sourceSection.getStartLine() -1).toString();
-                    if ((example.getProbeAll() || explicitProbeAnnotation.trim().equals("// <Probe />"))) {
+                    if (example.getProbeMode() == ExampleDefinition.ProbeMode.ALL ||
+                        (example.getProbeMode() == ExampleDefinition.ProbeMode.DEFAULT && explicitProbeAnnotation.trim().equals("// <Probe />"))) {
                         ProbeDefinition probe = new ProbeDefinition(sourceSection.getStartLine());
                         example.getProbes().add(probe);
                         probe.setResult(result);
@@ -272,21 +272,23 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
                         probe.setEndColumn(sourceSection.getEndColumn());
                     }
 
-                    String assertionAnnotationPattern = "// <(Assertion[a-zA-Z0-9_]*) (.*)\\/>";
-                    Matcher m = Pattern.compile(assertionAnnotationPattern).matcher(explicitProbeAnnotation);
-                    while (m.find()) {
-                        String exampleForAssertion = m.group(2).trim().split(" ")[0].split("=")[1];
-                        if (!example.getExampleName().equals(exampleForAssertion)) {
-                            continue;
+                    if (example.getProbeMode() == ExampleDefinition.ProbeMode.ALL || example.getProbeMode() == ExampleDefinition.ProbeMode.DEFAULT) {
+                        String assertionAnnotationPattern = "// <(Assertion[a-zA-Z0-9_]*) (.*)\\/>";
+                        Matcher m = Pattern.compile(assertionAnnotationPattern).matcher(explicitProbeAnnotation);
+                        while (m.find()) {
+                            String exampleForAssertion = m.group(2).trim().split(" ")[0].split("=")[1];
+                            if (!example.getExampleName().equals(exampleForAssertion)) {
+                                continue;
+                            }
+                            String expectedValue = m.group(2).trim().split(" ")[1].split("=")[1];
+                            Object expectedValueObject = SourceToBabylonParser.convertExpectedValueType(expectedValue);
+                            AssertionDefinition assertion = new AssertionDefinition(sourceSection.getStartLine(), expectedValueObject);
+                            example.getAssertions().add(assertion);
+                            assertion.setResult(result);
+                            assertion.setUri(uri);
+                            assertion.setStartColumn(sourceSection.getStartColumn());
+                            assertion.setEndColumn(sourceSection.getEndColumn());
                         }
-                        String expectedValue = m.group(2).trim().split(" ")[1].split("=")[1];
-                        Object expectedValueObject = SourceToBabylonParser.convertExpectedValueType(expectedValue);
-                        AssertionDefinition assertion = new AssertionDefinition(sourceSection.getStartLine(), expectedValueObject);
-                        example.getAssertions().add(assertion);
-                        assertion.setResult(result);
-                        assertion.setUri(uri);
-                        assertion.setStartColumn(sourceSection.getStartColumn());
-                        assertion.setEndColumn(sourceSection.getEndColumn());
                     }
                 }
 
@@ -295,7 +297,6 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
                     // Do nothing
                 }
             }));
-
 
         Object exampleResult;
         try {

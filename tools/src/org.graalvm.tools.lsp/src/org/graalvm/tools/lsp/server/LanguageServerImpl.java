@@ -448,18 +448,33 @@ public final class LanguageServerImpl extends LanguageServer {
         }
         builder.append(" * <Example");
 
-        builder.append(" :name=\"example").append(indexOfNewlyCreatedExamples).append("\"");
-
         if (inputMappingObject.has("inputMapping")) {
             JSONObject inputMapping = inputMappingObject.getJSONObject("inputMapping");
 
-            inputMapping.toMap().forEach((key, value) -> {
-                builder.append(" ");
-                builder.append(key);
+            if (inputMapping.has("exampleName")) {
+                builder.append(" :name=\"");
+                builder.append(inputMapping.get("exampleName"));
+                builder.append("\"");
+            } else {
+                builder.append(" :name=\"example");
+                builder.append(indexOfNewlyCreatedExamples);
+                builder.append("\"");
+            }
 
-                builder.append("=");
-                builder.append(value.toString());
-            });
+            if (inputMapping.has("probeMode")) {
+                builder.append(" :probe-mode=\"");
+                builder.append(inputMapping.get("probeMode"));
+                builder.append("\"");
+            }
+
+            if (inputMapping.has("variables")) {
+                inputMapping.getJSONObject("variables").toMap().forEach((key, value) -> {
+                    builder.append(" ");
+                    builder.append(key);
+                    builder.append("=");
+                    builder.append(value.toString());
+                });
+            }
         }
 
         builder.append(" />\n");
