@@ -61,7 +61,7 @@ export default async function setVariableValuesMultiStepInput(
             step: 1,
             title,
             totalSteps: 4,
-            validate: validateExampleName,
+            validate: ((_: string) => undefined),  // do nothing
             value: typeof currentState.exampleName === 'string' ? currentState.exampleName : '',
         });
         return (input: MultiStepInput) => pickProbeMode(input, currentState);
@@ -158,11 +158,6 @@ export default async function setVariableValuesMultiStepInput(
         // Could show a notification with the option to resume.
         return new Promise<boolean>(() => undefined);
     }
-
-    async function validateExampleName() {
-		// TODO: check if name is unique
-		return undefined;
-	}
 
     async function validateVariableType(value: string, type: string) {
         if (type === 'any') {
