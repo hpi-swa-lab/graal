@@ -1,5 +1,8 @@
 package org.graalvm.tools.lsp.definitions;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -21,6 +24,71 @@ public class ExampleDefinition {
     private int exampleDefinitionEndColumn;
     private String uri;
 
+    private static final String[] emojis = {
+            "🍄",
+            "🍅",
+            "🍆",
+            "🍇",
+            "🍈",
+            "🍉",
+            "🍊",
+            "🍋",
+            "🍌",
+            "🍍",
+            "🍎",
+            "🍏",
+            "🍐",
+            "🍑",
+            "🍒",
+            "🍓",
+            "🍔",
+            "🍕",
+            "🍖",
+            "🍗",
+            "🍘",
+            "🍙",
+            "🍚",
+            "🍛",
+            "🍜",
+            "🍝",
+            "🍞",
+            "🍟",
+            "🍠",
+            "🍡",
+            "🍢",
+            "🍣",
+            "🍤",
+            "🍥",
+            "🍦",
+            "🍧",
+            "🍨",
+            "🍩",
+            "🍪",
+            "🍫",
+            "🍬",
+            "🍭",
+            "🍮",
+            "🍯",
+            "🍰",
+            "🍱",
+            "🍲",
+            "🍳",
+            "🍴",
+            "🍵",
+            "🍶",
+            "🍷",
+            "🍸",
+            "🍹",
+            "🍺",
+            "🍼",
+            "🍽",
+            "🍾",
+            "🍿",
+            "🎀",
+            "🎁",
+            "🎂",
+    };
+
     public ExampleDefinition(String exampleName,
                              int functionStartLine,
                              String functionName,
@@ -41,6 +109,29 @@ public class ExampleDefinition {
 
     public String getExampleName() {
         return exampleName;
+    }
+
+    public String getUniqueEmoji() {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] encodedhash = digest.digest(getExampleName().getBytes(StandardCharsets.UTF_8));
+            String hexHash = bytesToHex(encodedhash);
+            long decimalHash = Long.parseLong(hexHash.substring(0, 8), 16);
+            int emojiIndex = Math.toIntExact(decimalHash % emojis.length);
+            return emojis[emojiIndex];
+        } catch (NoSuchAlgorithmException e) {
+            return "";
+        }
+    }
+
+    private String bytesToHex(byte[] hash) {
+        StringBuffer hexString = new StringBuffer();
+        for (int i = 0; i < hash.length; i++) {
+            String hex = Integer.toHexString(0xff & hash[i]);
+            if (hex.length() == 1) hexString.append('0');
+            hexString.append(hex);
+        }
+        return hexString.toString();
     }
 
     public int getFunctionStartLine() {
