@@ -3,7 +3,7 @@
 import { Position, Range, window, TextEditorDecorationType} from 'vscode';
 // import NamedDisposable from '../utils/namedDisposable';
 
-export const PUBLISH_DECORATIONS_REQUEST: string = "custom/publishDecorations";
+export const PUBLISH_DECORATIONS_REQUEST: string = "textDocument/publishDecorations";
 const PROBE_DECORATION_TYPE = "PROBE_DECORATION";
 const ASSERTION_DECORATION_TYPE = "ASSERTION_DECORATION";
 const EXAMPLE_DECORATION_TYPE = "EXAMPLE_DECORATION";
