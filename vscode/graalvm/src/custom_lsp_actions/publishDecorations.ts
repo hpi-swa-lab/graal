@@ -87,16 +87,7 @@ export function publishDecorations({ uri, decorations }): void {
 	}, []);
 
 	const probeDecorations = decorations.filter(decoration => decoration.decorationType === PROBE_DECORATION_TYPE);
-	const assertionDecorations = decorations
-		.filter(decoration => decoration.decorationType === ASSERTION_DECORATION_TYPE)
-		// replace "true"/"false" strings with emojis
-		.map(({range, decorationText}) => {
-			decorationText = decorationText
-				.split(", ")
-				.map(assertionResult => assertionResult === "true" ? "\u2705" : "\u274c")
-				.join(", ");
-			return {range, decorationText};
-		});
+	const assertionDecorations = decorations.filter(decoration => decoration.decorationType === ASSERTION_DECORATION_TYPE);
 	const exampleDecorations = decorations.filter(decoration => decoration.decorationType === EXAMPLE_DECORATION_TYPE);
 
 	openEditor.setDecorations(

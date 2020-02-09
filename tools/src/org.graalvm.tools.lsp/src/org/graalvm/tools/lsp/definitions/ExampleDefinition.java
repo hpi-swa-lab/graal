@@ -23,6 +23,7 @@ public class ExampleDefinition {
     private int exampleDefinitionLine;
     private int exampleDefinitionEndColumn;
     private String uri;
+    private String uniqueEmoji;
 
     private static final String[] emojis = {
             "🍄",
@@ -112,16 +113,20 @@ public class ExampleDefinition {
     }
 
     public String getUniqueEmoji() {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] encodedhash = digest.digest(getExampleName().getBytes(StandardCharsets.UTF_8));
-            String hexHash = bytesToHex(encodedhash);
-            long decimalHash = Long.parseLong(hexHash.substring(0, 8), 16);
-            int emojiIndex = Math.toIntExact(decimalHash % emojis.length);
-            return emojis[emojiIndex];
-        } catch (NoSuchAlgorithmException e) {
-            return "";
+        if (this.uniqueEmoji == null) {
+            try {
+                MessageDigest digest = MessageDigest.getInstance("SHA-256");
+                byte[] encodedhash = digest.digest(getExampleName().getBytes(StandardCharsets.UTF_8));
+                String hexHash = bytesToHex(encodedhash);
+                long decimalHash = Long.parseLong(hexHash.substring(0, 8), 16);
+                int emojiIndex = Math.toIntExact(decimalHash % emojis.length);
+                this.uniqueEmoji = emojis[emojiIndex];
+            } catch (NoSuchAlgorithmException e) {
+                this.uniqueEmoji = "";
+            }
         }
+
+        return this.uniqueEmoji;
     }
 
     private String bytesToHex(byte[] hash) {

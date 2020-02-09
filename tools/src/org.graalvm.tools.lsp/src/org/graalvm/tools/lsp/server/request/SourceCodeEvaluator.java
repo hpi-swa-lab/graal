@@ -266,7 +266,7 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
                         (example.getProbeMode() == ExampleDefinition.ProbeMode.DEFAULT && explicitProbeAnnotation.trim().equals("// <Probe />"))) {
                         ProbeDefinition probe = new ProbeDefinition(sourceSection.getStartLine());
                         example.getProbes().add(probe);
-                        probe.setResult(example.getUniqueEmoji() + result);
+                        probe.setResult(result);
                         probe.setUri(uri);
                         probe.setStartColumn(sourceSection.getStartColumn());
                         probe.setEndColumn(sourceSection.getEndColumn());
@@ -284,7 +284,7 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
                             Object expectedValueObject = SourceToBabylonParser.convertExpectedValueType(expectedValue);
                             AssertionDefinition assertion = new AssertionDefinition(sourceSection.getStartLine(), expectedValueObject);
                             example.getAssertions().add(assertion);
-                            assertion.setResult(example.getUniqueEmoji() + result);
+                            assertion.setResult(result);
                             assertion.setUri(uri);
                             assertion.setStartColumn(sourceSection.getStartColumn());
                             assertion.setEndColumn(sourceSection.getEndColumn());
@@ -304,7 +304,7 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
         } catch (Exception e) {
             exampleResult = e.getMessage();
         }
-        example.setExampleResult(example.getUniqueEmoji() + exampleResult);
+        example.setExampleResult(exampleResult);
 
         eventBindingList.forEach(EventBinding::dispose);
 
