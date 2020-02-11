@@ -417,7 +417,7 @@ public class LanguageServer {
 
                 @Override
                 public void publishDecorations(PublishDecorationsParams params) {
-                    sendNotification("custom/publishDecorations", params.jsonData);
+                    sendNotification("textDocument/publishDecorations", params.jsonData);
                 }
             });
         }

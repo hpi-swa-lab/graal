@@ -344,7 +344,7 @@ public final class LanguageServerImpl extends LanguageServer {
                             Position.create(probe.getLine(), probe.getStartColumn()),
                             Position.create(probe.getLine(), probe.getEndColumn())
                     ),
-                    probe.getResult() != null ? probe.getResult().toString() : "null",
+                    example.getUniqueEmoji() + (probe.getResult() != null ? probe.getResult().toString() : "null"),
                     Decoration.PROBE_DECORATION_TYPE
             );
             if (existingDecorations != null) {
@@ -363,7 +363,8 @@ public final class LanguageServerImpl extends LanguageServer {
                             Position.create(assertion.getLine(), assertion.getStartColumn()),
                             Position.create(assertion.getLine(), assertion.getEndColumn())
                     ),
-                    Boolean.toString(assertion.isAssertionTrue()),
+                    // \u2705 is a ✅ and \u274c is a ❌
+                    example.getUniqueEmoji() + (assertion.isAssertionTrue() ? "\u2705" : "\u274c"),
                     Decoration.ASSERTION_DECORATION_TYPE
             );
             if (existingDecorations != null) {
@@ -381,7 +382,7 @@ public final class LanguageServerImpl extends LanguageServer {
                         Position.create(example.getExampleDefinitionLine(), 0),
                         Position.create(example.getExampleDefinitionLine(), example.getExampleDefinitionEndColumn())
                 ),
-                example.getExampleResult() != null ? example.getExampleResult().toString() : "null",
+                example.getUniqueEmoji() + (example.getExampleResult() != null ? example.getExampleResult().toString() : "null"),
                 Decoration.EXAMPLE_DECORATION_TYPE
         );
         if (existingDecorations != null) {

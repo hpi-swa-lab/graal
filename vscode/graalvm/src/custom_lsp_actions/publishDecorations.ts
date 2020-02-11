@@ -3,7 +3,7 @@
 import { Position, Range, window, TextEditorDecorationType} from 'vscode';
 // import NamedDisposable from '../utils/namedDisposable';
 
-export const PUBLISH_DECORATIONS_REQUEST: string = "custom/publishDecorations";
+export const PUBLISH_DECORATIONS_REQUEST: string = "textDocument/publishDecorations";
 const PROBE_DECORATION_TYPE = "PROBE_DECORATION";
 const ASSERTION_DECORATION_TYPE = "ASSERTION_DECORATION";
 const EXAMPLE_DECORATION_TYPE = "EXAMPLE_DECORATION";
@@ -87,16 +87,7 @@ export function publishDecorations({ uri, decorations }): void {
 	}, []);
 
 	const probeDecorations = decorations.filter(decoration => decoration.decorationType === PROBE_DECORATION_TYPE);
-	const assertionDecorations = decorations
-		.filter(decoration => decoration.decorationType === ASSERTION_DECORATION_TYPE)
-		// replace "true"/"false" strings with emojis
-		.map(({range, decorationText}) => {
-			decorationText = decorationText
-				.split(", ")
-				.map(assertionResult => assertionResult === "true" ? "\u2705" : "\u274c")
-				.join(", ");
-			return {range, decorationText};
-		});
+	const assertionDecorations = decorations.filter(decoration => decoration.decorationType === ASSERTION_DECORATION_TYPE);
 	const exampleDecorations = decorations.filter(decoration => decoration.decorationType === EXAMPLE_DECORATION_TYPE);
 
 	openEditor.setDecorations(
