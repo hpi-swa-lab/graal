@@ -21,7 +21,6 @@ public class ExampleDefinition {
     private List<AssertionDefinition> assertions;
     private Object exampleResult;
     private int exampleDefinitionLine;
-    private int exampleDefinitionEndColumn;
     private String uri;
     private String uniqueEmoji;
 
@@ -94,7 +93,6 @@ public class ExampleDefinition {
                              int functionStartLine,
                              String functionName,
                              int exampleDefinitionLine,
-                             int exampleDefinitionEndColumn,
                              String uri,
                              ProbeMode probeMode) {
         this.exampleName = exampleName;
@@ -104,7 +102,6 @@ public class ExampleDefinition {
         this.probeMode = probeMode;
         this.assertions = new ArrayList<>();
         this.exampleDefinitionLine = exampleDefinitionLine;
-        this.exampleDefinitionEndColumn = exampleDefinitionEndColumn;
         this.uri = uri;
     }
 
@@ -169,10 +166,6 @@ public class ExampleDefinition {
 
     public int getExampleDefinitionLine() {
         return exampleDefinitionLine;
-    }
-
-    public int getExampleDefinitionEndColumn() {
-        return exampleDefinitionEndColumn;
     }
 
     public String getUri() {

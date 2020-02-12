@@ -48,7 +48,6 @@ public class SourceToBabylonParser {
                     lineNumber,
                     this.exampleInvocationCode,
                     this.getExampleDefinitionLine(example[0]),
-                    this.getExampleDefinitionEndColumn(example[0]),
                     this.uri,
                     probeMode));
         });
@@ -107,18 +106,6 @@ public class SourceToBabylonParser {
             if (m.matcher(line).find())
                 return lineNumber;
             lineNumber++;
-        }
-
-        return -1;
-    }
-
-    public int getExampleDefinitionEndColumn(String exampleName) {
-        String pattern = exampleAnnotationPatternPrefix + exampleName;
-        Pattern m = Pattern.compile(pattern);
-
-        for (String line : this.annotatedSource.split("\n")) {
-            if (m.matcher(line).find())
-                return line.length();
         }
 
         return -1;

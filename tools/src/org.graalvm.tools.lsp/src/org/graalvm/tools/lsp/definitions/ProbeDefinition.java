@@ -3,8 +3,6 @@ package org.graalvm.tools.lsp.definitions;
 public class ProbeDefinition {
     private String uri;
     private int line;
-    private int startColumn;
-    private int endColumn;
     private Object result;
 
     public ProbeDefinition(int line) {
@@ -21,22 +19,6 @@ public class ProbeDefinition {
 
     public int getLine() {
         return line;
-    }
-
-    public int getStartColumn() {
-        return startColumn;
-    }
-
-    public void setStartColumn(int startColumn) {
-        this.startColumn = startColumn;
-    }
-
-    public int getEndColumn() {
-        return endColumn;
-    }
-
-    public void setEndColumn(int endColumn) {
-        this.endColumn = endColumn;
     }
 
     public Object getResult() {
