@@ -268,8 +268,6 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
                         example.getProbes().add(probe);
                         probe.setResult(result);
                         probe.setUri(uri);
-                        probe.setStartColumn(sourceSection.getStartColumn());
-                        probe.setEndColumn(sourceSection.getEndColumn());
                     }
 
                     if (example.getProbeMode() == ExampleDefinition.ProbeMode.ALL || example.getProbeMode() == ExampleDefinition.ProbeMode.DEFAULT) {
@@ -286,8 +284,6 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
                             example.getAssertions().add(assertion);
                             assertion.setResult(result);
                             assertion.setUri(uri);
-                            assertion.setStartColumn(sourceSection.getStartColumn());
-                            assertion.setEndColumn(sourceSection.getEndColumn());
                         }
                     }
                 }
