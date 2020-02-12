@@ -341,8 +341,8 @@ public final class LanguageServerImpl extends LanguageServer {
             List<Decoration> existingDecorations = uriToDecorationsMap.get(probe.getUri());
             Decoration newDecoration = Decoration.create(
                     Range.create(
-                            Position.create(probe.getLine(), probe.getStartColumn()),
-                            Position.create(probe.getLine(), probe.getEndColumn())
+                            Position.create(probe.getLine(), Integer.MAX_VALUE),
+                            Position.create(probe.getLine(), Integer.MAX_VALUE)
                     ),
                     example.getUniqueEmoji() + (probe.getResult() != null ? probe.getResult().toString() : "null"),
                     Decoration.PROBE_DECORATION_TYPE
@@ -360,8 +360,8 @@ public final class LanguageServerImpl extends LanguageServer {
             List<Decoration> existingDecorations = uriToDecorationsMap.get(assertion.getUri());
             Decoration newDecoration = Decoration.create(
                     Range.create(
-                            Position.create(assertion.getLine(), assertion.getStartColumn()),
-                            Position.create(assertion.getLine(), assertion.getEndColumn())
+                            Position.create(assertion.getLine(), Integer.MAX_VALUE),
+                            Position.create(assertion.getLine(), Integer.MAX_VALUE)
                     ),
                     // \u2705 is a ✅ and \u274c is a ❌
                     example.getUniqueEmoji() + (assertion.isAssertionTrue() ? "\u2705" : "\u274c"),
@@ -379,8 +379,8 @@ public final class LanguageServerImpl extends LanguageServer {
         List<Decoration> existingDecorations = uriToDecorationsMap.get(example.getUri());
         Decoration newDecoration = Decoration.create(
                 Range.create(
-                        Position.create(example.getExampleDefinitionLine(), 0),
-                        Position.create(example.getExampleDefinitionLine(), example.getExampleDefinitionEndColumn())
+                        Position.create(example.getExampleDefinitionLine(), Integer.MAX_VALUE),
+                        Position.create(example.getExampleDefinitionLine(), Integer.MAX_VALUE)
                 ),
                 example.getUniqueEmoji() + (example.getExampleResult() != null ? example.getExampleResult().toString() : "null"),
                 Decoration.EXAMPLE_DECORATION_TYPE
