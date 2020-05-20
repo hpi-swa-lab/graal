@@ -58,6 +58,9 @@ export function activate(context: vscode.ExtensionContext) {
 			stopLanguageServer().then(() => startLanguageServer(context, vscode.workspace.getConfiguration('graalvm').get('home') as string));
 		}
 	}));
+	context.subscriptions.push(vscode.workspace.onDidChangeTextDocument((params) => {
+		console.log(`[${Date.now()}] ${params.document.uri} changed`);
+	}));
 	const graalVMHome = vscode.workspace.getConfiguration('graalvm').get('home') as string;
 	if (!graalVMHome) {
 		vscode.window.showInformationMessage('No path to GraalVM home specified.', SELECT_GRAALVM, INSTALL_GRAALVM, OPEN_SETTINGS).then(value => {
@@ -97,7 +100,7 @@ function startLanguageServer(context: vscode.ExtensionContext, graalVMHome: stri
 			if (delegateServers) {
 				lspOpt = '--lsp.Delegates=' + delegateServers;
 			}
-			const serverProcess = cp.spawn(re, ['--vm.Xrunjdwp:transport=dt_socket,server=y,address=8000,suspend=n', '--log.lsp.org.graalvm.tools.lsp.server.types.LanguageServer.level=ALL', '--jvm', lspOpt, '--experimental-options', '--shell'], { cwd: serverWorkDir });
+			const serverProcess = cp.spawn(re, ['--vm.Xrunjdwp:transport=dt_socket,server=y,address=8000,suspend=n', '--log.lsp.level=ALL', '--jvm', lspOpt, '--experimental-options', '--shell'], { cwd: serverWorkDir });
 			if (!serverProcess || !serverProcess.pid) {
 				vscode.window.showErrorMessage(`Launching server using command ${re} failed.`);
 			} else {
@@ -108,9 +111,7 @@ function startLanguageServer(context: vscode.ExtensionContext, graalVMHome: stri
 					});
 					if (serverProcess) {
 					    serverProcess.stderr.on('data', data => {
-							if (client) {
-							    client.outputChannel.append(data.toString('utf8'));
-							}
+							console.log(data.toString('utf8'));
 						});
 					}
 				});

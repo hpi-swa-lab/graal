@@ -234,6 +234,8 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
         surrogate.setEditorText(surrogate.getEditorText() + "\n" + example.getFunctionName());
         final CallTarget callTarget = parse(surrogate);
 
+        System.err.println("[" + System.currentTimeMillis() + "] Babylonian parsing done.");
+
         List<EventBinding<?>> eventBindingList = new ArrayList<>();
 
             SourceSectionFilter sourceSectionFilter = SourceSectionFilter.

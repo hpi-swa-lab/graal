@@ -56,7 +56,7 @@ const buildDecorationOption = ({range, decorationText}) => ({
 });
 
 export function publishDecorations({ uri, decorations }): void {
-	console.debug('received new decorations');
+	// console.debug('received new decorations');
 
 	// replace URL encoded spaces
 	const fileName: string = uri.split('file://')[1].replace(/%20/g, ' ');
@@ -65,14 +65,14 @@ export function publishDecorations({ uri, decorations }): void {
 	decorations = decorations.map(
 		({range: rangeParams, decorationType, decorationText}) => ({range: parseRangeFromGraal(rangeParams), decorationType, decorationText})
 	);
-	decorations.forEach(decoration => console.debug(
-		decoration.decorationText,
-		decoration.decorationType,
-		decoration.range.start.line,
-		decoration.range.start.character,
-		decoration.range.end.line,
-		decoration.range.end.character
-	));
+	// decorations.forEach(decoration => console.debug(
+	// 	decoration.decorationText,
+	// 	decoration.decorationType,
+	// 	decoration.range.start.line,
+	// 	decoration.range.start.character,
+	// 	decoration.range.end.line,
+	// 	decoration.range.end.character
+	// ));
 
 	// combine decorations if there are multiple decorations per line
 	decorations = decorations.reduce((decorationsAccumulator, newDecoration) => {
@@ -104,4 +104,5 @@ export function publishDecorations({ uri, decorations }): void {
 		exampleDecorationType,
 		exampleDecorations.map(buildDecorationOption)
 	);
+	console.debug(`[${Date.now()}] decorations set`);
 }
