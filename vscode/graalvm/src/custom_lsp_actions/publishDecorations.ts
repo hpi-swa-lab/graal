@@ -34,6 +34,7 @@ const probeDecorationType: TextEditorDecorationType = window.createTextEditorDec
 const assertionDecorationType: TextEditorDecorationType = window.createTextEditorDecorationType({
 	after: {
 		color: "white",
+		backgroundColor: "#EF6C00",
 		margin: "1rem",
 	},
 });

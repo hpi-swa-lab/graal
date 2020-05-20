@@ -363,8 +363,8 @@ public final class LanguageServerImpl extends LanguageServer {
                             Position.create(assertion.getLine(), Integer.MAX_VALUE),
                             Position.create(assertion.getLine(), Integer.MAX_VALUE)
                     ),
-                    // \u2705 is a ✅ and \u274c is a ❌
-                    example.getUniqueEmoji() + (assertion.isAssertionTrue() ? "\u2705" : "\u274c"),
+                    // \u2713 is a ✓ and \u2715 is a ✕
+                    example.getUniqueEmoji() + (assertion.isAssertionTrue() ? "\u2713" : "\u2715"),
                     Decoration.ASSERTION_DECORATION_TYPE
             );
             if (existingDecorations != null) {
