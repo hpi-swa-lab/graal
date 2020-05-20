@@ -263,7 +263,7 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
                     }
 
 
-                    String explicitProbeAnnotation = sourceSection.getSource().getCharacters(sourceSection.getStartLine() -1).toString();
+                    String explicitProbeAnnotation = sourceSection.getSource().getCharacters(Math.max(sourceSection.getStartLine() - 1 /* -1 for previous line. */, 1)).toString();
                     if (example.getProbeMode() == ExampleDefinition.ProbeMode.ALL ||
                         (example.getProbeMode() == ExampleDefinition.ProbeMode.DEFAULT && explicitProbeAnnotation.trim().equals("// <Probe />"))) {
                         ProbeDefinition probe = new ProbeDefinition(sourceSection.getStartLine());
