@@ -277,18 +277,21 @@ public final class LanguageServerImpl extends LanguageServer {
 
     @Override
     public void didChange(DidChangeTextDocumentParams params) {
-        processChanges(params.getTextDocument().getUri(), params.getContentChanges());
-    }
-
-    private void processChanges(final String documentUri,
-                                final List<? extends TextDocumentContentChangeEvent> list) {
-        String langId = openedFileUri2LangId.get(URI.create(documentUri));
+        String uriString = params.getTextDocument().getUri();
+        URI uri = URI.create(uriString);
+        String langId = openedFileUri2LangId.get(uri);
         if (langId == null) {
-            LOG.warning("Changed document that was not opened: " + documentUri);
-            return;
+            LOG.warning("Guessing language. Changed document that was not (yet) opened: " + uri);
+            if (uriString.endsWith(".js")){
+                langId = "js";
+            } else if (uriString.endsWith(".sl")){
+                langId = "sl";
+            } else {
+                return;
+            }
         }
 
-        URI uri = URI.create(documentUri);
+        final List<? extends TextDocumentContentChangeEvent> list = params.getContentChanges();
         switch (TEXT_DOCUMENT_SYNC_KIND) {
             case Full:
                 // Only need the first element, as long as sync mode isTextDocumentSyncKind.Full
