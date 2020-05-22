@@ -60,7 +60,7 @@ export default async function setVariableValuesMultiStepInput(
             shouldResume,
             step: 1,
             title,
-            totalSteps: 4,
+            totalSteps: 3,
             validate: ((_: string) => undefined),  // do nothing
             value: typeof currentState.exampleName === 'string' ? currentState.exampleName : '',
         });
@@ -75,7 +75,7 @@ export default async function setVariableValuesMultiStepInput(
 		const pick = await input.showQuickPick({
 			title,
 			step: 2,
-			totalSteps: 4,
+			totalSteps: 3,
 			placeholder: 'Pick a probe mode',
 			items: probeModes,
 			activeItem: typeof currentState.probeMode !== 'string' ? currentState.probeMode : undefined,
@@ -121,9 +121,9 @@ export default async function setVariableValuesMultiStepInput(
         const newValue = await input.showInputBox({
             prompt: `Choose a value for the selected variable ${currentState.selectedVariableQuickPick.variableName} (${currentState.selectedVariableQuickPick.variableType})`,
             shouldResume,
-            step: 4,
+            step: 3,
             title,
-            totalSteps: 4,
+            totalSteps: 3,
             validate: (value: string) =>
                 validateVariableType(
                     value,
