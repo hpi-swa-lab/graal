@@ -7,8 +7,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class SourceToBabylonParser {
-    private static final String exampleAnnotationPattern = "<Example (?<paramString>.*(?<nameAssign>:name=\"(?<name>[a-zA-Z0-9_]*)\") (?<probeAssign>:probe-mode=\"(?<mode>[a-zA-Z0-9_]*)\")?.*)\\/>";
+    private static final String exampleAnnotationPattern = "<Example (?<paramString>.*(?<nameAssign>:name=\"(?<name>[a-zA-Z0-9_ ]*)\") (?<probeAssign>:probe-mode=\"(?<mode>[a-zA-Z0-9_]*)\")?.*)\\/>";
     private static final String exampleAnnotationPatternPrefix = "<Example .*:name=\"";
+    public static final Pattern keyValueExtractionPattern = Pattern.compile("(\\w+)=\"*((?<=\")[^\"]+(?=\")|([^\\s]+))\"*");
 
     String annotatedSource;
     String exampleInvocationCode;
@@ -18,8 +19,8 @@ public class SourceToBabylonParser {
     List<LanguageAgnosticFunctionDeclarationDefinition> functionsInSource;
 
     public SourceToBabylonParser(String source,
-                                 List<LanguageAgnosticFunctionDeclarationDefinition> functionsInSource,
-                                 String uri) {
+                    List<LanguageAgnosticFunctionDeclarationDefinition> functionsInSource,
+                    String uri) {
         this.annotatedSource = source;
         this.functionsInSource = functionsInSource;
         this.uri = uri;
@@ -38,18 +39,17 @@ public class SourceToBabylonParser {
             int lineNumber = (Integer) lineNumberAndParameterStrings.keySet().toArray()[0];
             String parameterStrings = lineNumberAndParameterStrings.get(lineNumber);
             Map<String, Object> exampleParameters = new LinkedHashMap<>();
-            for (String substring : parameterStrings.split(" ")) {
-                if (!substring.equals("")) {
-                    exampleParameters.put(substring.split("=")[0], substring.split("=")[1]);
-                }
+            Matcher m = keyValueExtractionPattern.matcher(parameterStrings);
+            while (m.find()) {
+                exampleParameters.put(m.group(1), convertExpectedValueType(m.group(2)));
             }
             this.exampleInvocationCode = this.getExampleInvocationCode(lineNumber, exampleParameters, this.functionsInSource);
             this.examples.add(new ExampleDefinition(example[0],
-                    lineNumber,
-                    this.exampleInvocationCode,
-                    this.getExampleDefinitionLine(example[0]),
-                    this.uri,
-                    probeMode));
+                            lineNumber,
+                            this.exampleInvocationCode,
+                            this.getExampleDefinitionLine(example[0]),
+                            this.uri,
+                            probeMode));
         });
 
         return this.examples;
@@ -112,7 +112,7 @@ public class SourceToBabylonParser {
     }
 
     public String getExampleInvocationCode(Integer lineNumber, Map<String, Object> exampleParameters,
-                                           List<LanguageAgnosticFunctionDeclarationDefinition> functionsInSource) {
+                    List<LanguageAgnosticFunctionDeclarationDefinition> functionsInSource) {
         String functionNameForExample = "";
         List<LanguageAgnosticFunctionArgumentDefinition> functionArguments = new ArrayList<>();
         List<String> functionArgumentNames = new ArrayList<>();
@@ -155,7 +155,8 @@ public class SourceToBabylonParser {
                 } else if (expectedValue.equals("false") || expectedValue.equals("False")) {
                     return false;
                 } else {
-                    return expectedValue;
+                    // Interpret value as string by adding quotes
+                    return "\"" + expectedValue + "\"";
                 }
             }
         }

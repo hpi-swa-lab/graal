@@ -38,6 +38,9 @@ import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.NodeVisitor;
 import com.oracle.truffle.api.source.Source;
 import com.oracle.truffle.api.source.SourceSection;
+
+import jdk.nashorn.internal.runtime.Context;
+
 import org.graalvm.tools.lsp.definitions.*;
 import org.graalvm.tools.lsp.exceptions.DiagnosticsNotification;
 import org.graalvm.tools.lsp.exceptions.EvaluationResultException;
@@ -60,8 +63,8 @@ import java.util.regex.Pattern;
 
 import static org.graalvm.tools.lsp.parsing.SourceToBabylonParser.*;
 
-
 public final class SourceCodeEvaluator extends AbstractRequestHandler {
+    private static final String EXPRESSION_START = "expression=\"";
     private static final TruffleLogger LOG = TruffleLogger.getLogger(LSPInstrument.ID, SourceCodeEvaluator.class);
     private static final InteropLibrary INTEROP = InteropLibrary.getFactory().getUncached();
 
@@ -106,17 +109,17 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
      * Python import statement. Therefore we need to filter via URI (or name if the URI is a
      * generated truffle-schema-URI).
      *
-     * @param uri           to filter sources for
+     * @param uri to filter sources for
      * @param sourceSection to filter for with same start and end indices
      * @return a builder to add further filter options
      */
     static SourceSectionFilter.Builder createSourceSectionFilter(URI uri, SourceSection sourceSection) {
         return SourceSectionFilter.newBuilder() //
-                .lineStartsIn(IndexRange.between(sourceSection.getStartLine(), sourceSection.getStartLine() + 1)) //
-                .lineEndsIn(IndexRange.between(sourceSection.getEndLine(), sourceSection.getEndLine() + 1)) //
-                .columnStartsIn(IndexRange.between(sourceSection.getStartColumn(), sourceSection.getStartColumn() + 1)) //
-                .columnEndsIn(IndexRange.between(sourceSection.getEndColumn(), sourceSection.getEndColumn() + 1)) //
-                .sourceIs(SourcePredicateBuilder.newBuilder().uriOrTruffleName(uri).build());
+                        .lineStartsIn(IndexRange.between(sourceSection.getStartLine(), sourceSection.getStartLine() + 1)) //
+                        .lineEndsIn(IndexRange.between(sourceSection.getEndLine(), sourceSection.getEndLine() + 1)) //
+                        .columnStartsIn(IndexRange.between(sourceSection.getStartColumn(), sourceSection.getStartColumn() + 1)) //
+                        .columnEndsIn(IndexRange.between(sourceSection.getEndColumn(), sourceSection.getEndColumn() + 1)) //
+                        .sourceIs(SourcePredicateBuilder.newBuilder().uriOrTruffleName(uri).build());
     }
 
     static List<CoverageData> findCoverageDataBeforeNode(TextDocumentSurrogate surrogate, Node targetNode) {
@@ -182,11 +185,10 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
                 }
 
                 LanguageAgnosticFunctionDeclarationDefinition function = new LanguageAgnosticFunctionDeclarationDefinition(
-                        scope.getName(),
-                        scope.getNode().getSourceSection().getStartLine(),
-                        scope.getNode().getSourceSection().getEndLine(),
-                        arguments
-                );
+                                scope.getName(),
+                                scope.getNode().getSourceSection().getStartLine(),
+                                scope.getNode().getSourceSection().getEndLine(),
+                                arguments);
                 functionDeclarations.put(scope.getNode().getSourceSection(), function);
             }));
         });
@@ -214,7 +216,7 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
         } catch (Exception e) {
             if (e instanceof TruffleException) {
                 throw DiagnosticsNotification.create(surrogate.getUri(),
-                        Diagnostic.create(SourceUtils.getRangeFrom((TruffleException) e), e.getMessage(), DiagnosticSeverity.Error, null, "Graal", null));
+                                Diagnostic.create(SourceUtils.getRangeFrom((TruffleException) e), e.getMessage(), DiagnosticSeverity.Error, null, "Graal", null));
             } else {
                 // TODO(ds) throw an Exception which the LSPServer can catch to send a client
                 // notification
@@ -238,63 +240,98 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
 
         List<EventBinding<?>> eventBindingList = new ArrayList<>();
 
-            SourceSectionFilter sourceSectionFilter = SourceSectionFilter.
-                    newBuilder().
-                    tagIs(StandardTags.StatementTag.class).
-                    build();
-            eventBindingList.add(env.getInstrumenter().attachExecutionEventListener(sourceSectionFilter, new ExecutionEventListener() {
-                @Override
-                public void onEnter(EventContext context, VirtualFrame frame) {
-                    // Do nothing
+        SourceSectionFilter sourceSectionFilter = SourceSectionFilter.newBuilder().tagIs(StandardTags.StatementTag.class, StandardTags.RootTag.class).build();
+        eventBindingList.add(env.getInstrumenter().attachExecutionEventListener(sourceSectionFilter, new ExecutionEventListener() {
+            @Override
+            public void onEnter(EventContext context, VirtualFrame frame) {
+                // Do nothing
+            }
+
+            @Override
+            public void onReturnValue(EventContext context, VirtualFrame frame, Object result) {
+                SourceSection sourceSection = context.getInstrumentedSourceSection();
+                String uri = sourceSection.getSource().getName();
+
+                if (result == null) {
+                    return;
                 }
 
-                @Override
-                public void onReturnValue(EventContext context, VirtualFrame frame, Object result) {
-                    SourceSection sourceSection = context.getInstrumentedSourceSection();
-                    String uri = sourceSection.getSource().getName();
+                // TODO Find a better way of enabling cross-file probing
+                if (!uri.equals(example.getUri())) {
+                    uri = example.getUri().substring(0, example.getUri().lastIndexOf("/") + 1) + uri;
+                }
 
-                    if (result == null) {
-                        return;
-                    }
-
-                    // TODO Find a better way of enabling cross-file probing
-                    if (!uri.equals(example.getUri())) {
-                        uri = example.getUri().substring(0, example.getUri().lastIndexOf("/") + 1) + uri;
-                    }
-
-
-                    String explicitProbeAnnotation = sourceSection.getSource().getCharacters(Math.max(sourceSection.getStartLine() - 1 /* -1 for previous line. */, 1)).toString();
-                    if (example.getProbeMode() == ExampleDefinition.ProbeMode.ALL ||
-                        (example.getProbeMode() == ExampleDefinition.ProbeMode.DEFAULT && explicitProbeAnnotation.trim().equals("// <Probe />"))) {
-                        ProbeDefinition probe = new ProbeDefinition(sourceSection.getStartLine());
-                        example.getProbes().add(probe);
-                        probe.setResult(result);
-                        probe.setUri(uri);
-                    }
-
-                    if (example.getProbeMode() == ExampleDefinition.ProbeMode.ALL || example.getProbeMode() == ExampleDefinition.ProbeMode.DEFAULT) {
-                        String assertionAnnotationPattern = "// <(Assertion[a-zA-Z0-9_]*) (.*)\\/>";
-                        Matcher m = Pattern.compile(assertionAnnotationPattern).matcher(explicitProbeAnnotation);
-                        while (m.find()) {
-                            String exampleForAssertion = m.group(2).trim().split(" ")[0].split("=")[1];
-                            if (!example.getExampleName().equals(exampleForAssertion)) {
-                                continue;
-                            }
-                            String expectedValue = m.group(2).trim().split(" ")[1].split("=")[1];
-                            Object expectedValueObject = SourceToBabylonParser.convertExpectedValueType(expectedValue);
-                            AssertionDefinition assertion = new AssertionDefinition(sourceSection.getStartLine(), expectedValueObject);
-                            example.getAssertions().add(assertion);
-                            assertion.setResult(result);
-                            assertion.setUri(uri);
+                /* -1 for previous line. */
+                int lineNumber = Math.max(sourceSection.getStartLine() - 1, 1);
+                String explicitProbeAnnotation = sourceSection.getSource().getCharacters(lineNumber).toString().trim();
+                boolean acceptAll = example.getProbeMode() == ExampleDefinition.ProbeMode.ALL;
+                boolean acceptDefault = example.getProbeMode() == ExampleDefinition.ProbeMode.DEFAULT;
+                if (acceptAll || (acceptDefault && explicitProbeAnnotation.contains("<Probe"))) {
+                    int line = sourceSection.getStartLine();
+                    Object probedValue = result;
+                    if (explicitProbeAnnotation.contains(EXPRESSION_START)) {
+                        int beginIndex = explicitProbeAnnotation.indexOf(EXPRESSION_START) + EXPRESSION_START.length();
+                        // Extract expression
+                        String expression = explicitProbeAnnotation.substring(beginIndex, explicitProbeAnnotation.indexOf("\" ", beginIndex));
+                        Source source = Source.newBuilder(sourceSection.getSource().getLanguage(), expression, "<probe>").build();
+                        ExecutableNode executableNode = env.parseInline(source, context.getInstrumentedNode(), frame.materialize());
+                        try {
+                            probedValue = executableNode.execute(frame);
+                        } catch (Exception e) {
+                            probedValue = e.getMessage();
                         }
+                        line -= 1; // Probe with expression is on previous line
+                    }
+                    ProbeDefinition probe = new ProbeDefinition(line);
+                    example.getProbes().add(probe);
+                    probe.setResult(probedValue);
+                    probe.setUri(uri);
+                } else if (acceptDefault && explicitProbeAnnotation.contains("<Assertion")) {
+                    int beginIndex = explicitProbeAnnotation.indexOf("<Assertion");
+                    String assertionContent = explicitProbeAnnotation.substring(beginIndex, explicitProbeAnnotation.indexOf("/>", beginIndex));
+                    Matcher m = SourceToBabylonParser.keyValueExtractionPattern.matcher(assertionContent);
+                    Map<String, String> assertionKeyValues = new HashMap<>();
+                    while (m.find()) {
+                        assertionKeyValues.put(m.group(1), m.group(2));
+                    }
+                    if (example.getExampleName().equals(assertionKeyValues.getOrDefault("example", ""))) {
+                        int line = sourceSection.getStartLine();
+                        Object actualResult;
+                        Object expectedValue;
+                        if (assertionKeyValues.containsKey("value")) {
+                            actualResult = result;
+                            expectedValue = SourceToBabylonParser.convertExpectedValueType(assertionKeyValues.get("value"));
+                        } else if (assertionKeyValues.containsKey("expression")) {
+                            expectedValue = true;
+                            Source source = Source.newBuilder(sourceSection.getSource().getLanguage(), assertionKeyValues.get("expression"), "<assertion>").build();
+                            ExecutableNode executableNode = env.parseInline(source, context.getInstrumentedNode(), frame.materialize());
+                            try {
+                                actualResult = executableNode.execute(frame);
+                            } catch (Exception e) {
+                                // Hack: Show error as probe
+                                ProbeDefinition probe = new ProbeDefinition(line);
+                                example.getProbes().add(probe);
+                                probe.setResult(e.getMessage());
+                                probe.setUri(uri);
+                                return;
+                            }
+                            line -= 1; // Assertion with expression is on previous line
+                        } else {
+                            return; // neither value nor expression found
+                        }
+                        AssertionDefinition assertion = new AssertionDefinition(line, expectedValue);
+                        example.getAssertions().add(assertion);
+                        assertion.setResult(actualResult);
+                        assertion.setUri(uri);
                     }
                 }
+            }
 
-                @Override
-                public void onReturnExceptional(EventContext context, VirtualFrame frame, Throwable exception) {
-                    // Do nothing
-                }
-            }));
+            @Override
+            public void onReturnExceptional(EventContext context, VirtualFrame frame, Throwable exception) {
+                // Do nothing
+            }
+        }));
 
         Object exampleResult;
         try {
@@ -388,7 +425,7 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
     }
 
     public EvaluationResult runToSectionAndEval(final TextDocumentSurrogate surrogate, final SourceSection sourceSection, SourceSectionFilter eventFilter, SourceSectionFilter inputFilter)
-            throws DiagnosticsNotification {
+                    throws DiagnosticsNotification {
         Set<URI> coverageUris = surrogate.getCoverageUris(sourceSection);
         URI runScriptUriFallback = coverageUris == null ? null : coverageUris.stream().findFirst().orElseGet(() -> null);
         TextDocumentSurrogate surrogateOfTestFile = createSurrogateForTestFile(surrogate, runScriptUriFallback);
@@ -396,90 +433,90 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
         final boolean isInputFilterDefined = inputFilter != null;
 
         EventBinding<ExecutionEventNodeFactory> binding = env.getInstrumenter().attachExecutionEventFactory(
-                eventFilter,
-                inputFilter,
-                new ExecutionEventNodeFactory() {
-                    StringBuilder indent = new StringBuilder("");
-
-                    @Override
-                    public ExecutionEventNode create(EventContext context) {
-                        return new ExecutionEventNode() {
-
-                            private String sourceSectionFormat(SourceSection section) {
-                                return "SourceSection(" + section.getCharacters().toString().replaceAll("\n", Matcher.quoteReplacement("\\n")) + ")";
-                            }
+                        eventFilter,
+                        inputFilter,
+                        new ExecutionEventNodeFactory() {
+                            StringBuilder indent = new StringBuilder("");
 
                             @Override
-                            public void onReturnValue(VirtualFrame frame, Object result) {
-                                if (LOG.isLoggable(Level.FINEST)) {
-                                    logOnReturnValue(result);
-                                }
+                            public ExecutionEventNode create(EventContext context) {
+                                return new ExecutionEventNode() {
 
-                                if (!isInputFilterDefined) {
-                                    CompilerDirectives.transferToInterpreter();
-                                    throw new EvaluationResultException(result);
-                                }
+                                    private String sourceSectionFormat(SourceSection section) {
+                                        return "SourceSection(" + section.getCharacters().toString().replaceAll("\n", Matcher.quoteReplacement("\\n")) + ")";
+                                    }
+
+                                    @Override
+                                    public void onReturnValue(VirtualFrame frame, Object result) {
+                                        if (LOG.isLoggable(Level.FINEST)) {
+                                            logOnReturnValue(result);
+                                        }
+
+                                        if (!isInputFilterDefined) {
+                                            CompilerDirectives.transferToInterpreter();
+                                            throw new EvaluationResultException(result);
+                                        }
+                                    }
+
+                                    @TruffleBoundary
+                                    private void logOnReturnValue(Object result) {
+                                        if (indent.length() > 1) {
+                                            indent.setLength(indent.length() - 2);
+                                        }
+                                        LOG.log(Level.FINEST, "{0}onReturnValue {1} {2} {3} {4}", new Object[]{indent, context.getInstrumentedNode().getClass().getSimpleName(),
+                                                        sourceSectionFormat(context.getInstrumentedSourceSection()), result});
+                                    }
+
+                                    @Override
+                                    public void onReturnExceptional(VirtualFrame frame, Throwable exception) {
+                                        if (LOG.isLoggable(Level.FINEST)) {
+                                            logOnReturnExceptional();
+                                        }
+                                    }
+
+                                    @TruffleBoundary
+                                    private void logOnReturnExceptional() {
+                                        indent.setLength(indent.length() - 2);
+                                        LOG.log(Level.FINEST, "{0}onReturnExceptional {1}", new Object[]{indent, sourceSectionFormat(context.getInstrumentedSourceSection())});
+                                    }
+
+                                    @Override
+                                    public void onEnter(VirtualFrame frame) {
+                                        if (LOG.isLoggable(Level.FINEST)) {
+                                            logOnEnter();
+                                        }
+                                    }
+
+                                    @TruffleBoundary
+                                    private void logOnEnter() {
+                                        LOG.log(Level.FINEST, "{0}onEnter {1} {2}", new Object[]{indent, context.getInstrumentedNode().getClass().getSimpleName(),
+                                                        sourceSectionFormat(context.getInstrumentedSourceSection())});
+                                        indent.append("  ");
+                                    }
+
+                                    @Override
+                                    public void onInputValue(VirtualFrame frame, EventContext inputContext, int inputIndex, Object inputValue) {
+                                        if (LOG.isLoggable(Level.FINEST)) {
+                                            logOnInputValue(inputContext, inputIndex, inputValue);
+                                        }
+                                        CompilerDirectives.transferToInterpreter();
+                                        throw new EvaluationResultException(inputValue);
+                                    }
+
+                                    @TruffleBoundary
+                                    private void logOnInputValue(EventContext inputContext, int inputIndex, Object inputValue) {
+                                        indent.setLength(indent.length() - 2);
+                                        LOG.log(Level.FINEST, "{0}onInputValue idx:{1} {2} {3} {4} {5} {6}",
+                                                        new Object[]{indent, inputIndex, inputContext.getInstrumentedNode().getClass().getSimpleName(),
+                                                                        sourceSectionFormat(context.getInstrumentedSourceSection()),
+                                                                        sourceSectionFormat(inputContext.getInstrumentedSourceSection()), inputValue,
+                                                                        env.findMetaObject(inputContext.getInstrumentedNode().getRootNode().getLanguageInfo(), inputValue)});
+                                        indent.append("  ");
+                                    }
+                                };
                             }
 
-                            @TruffleBoundary
-                            private void logOnReturnValue(Object result) {
-                                if (indent.length() > 1) {
-                                    indent.setLength(indent.length() - 2);
-                                }
-                                LOG.log(Level.FINEST, "{0}onReturnValue {1} {2} {3} {4}", new Object[]{indent, context.getInstrumentedNode().getClass().getSimpleName(),
-                                        sourceSectionFormat(context.getInstrumentedSourceSection()), result});
-                            }
-
-                            @Override
-                            public void onReturnExceptional(VirtualFrame frame, Throwable exception) {
-                                if (LOG.isLoggable(Level.FINEST)) {
-                                    logOnReturnExceptional();
-                                }
-                            }
-
-                            @TruffleBoundary
-                            private void logOnReturnExceptional() {
-                                indent.setLength(indent.length() - 2);
-                                LOG.log(Level.FINEST, "{0}onReturnExceptional {1}", new Object[]{indent, sourceSectionFormat(context.getInstrumentedSourceSection())});
-                            }
-
-                            @Override
-                            public void onEnter(VirtualFrame frame) {
-                                if (LOG.isLoggable(Level.FINEST)) {
-                                    logOnEnter();
-                                }
-                            }
-
-                            @TruffleBoundary
-                            private void logOnEnter() {
-                                LOG.log(Level.FINEST, "{0}onEnter {1} {2}", new Object[]{indent, context.getInstrumentedNode().getClass().getSimpleName(),
-                                        sourceSectionFormat(context.getInstrumentedSourceSection())});
-                                indent.append("  ");
-                            }
-
-                            @Override
-                            public void onInputValue(VirtualFrame frame, EventContext inputContext, int inputIndex, Object inputValue) {
-                                if (LOG.isLoggable(Level.FINEST)) {
-                                    logOnInputValue(inputContext, inputIndex, inputValue);
-                                }
-                                CompilerDirectives.transferToInterpreter();
-                                throw new EvaluationResultException(inputValue);
-                            }
-
-                            @TruffleBoundary
-                            private void logOnInputValue(EventContext inputContext, int inputIndex, Object inputValue) {
-                                indent.setLength(indent.length() - 2);
-                                LOG.log(Level.FINEST, "{0}onInputValue idx:{1} {2} {3} {4} {5} {6}",
-                                        new Object[]{indent, inputIndex, inputContext.getInstrumentedNode().getClass().getSimpleName(),
-                                                sourceSectionFormat(context.getInstrumentedSourceSection()),
-                                                sourceSectionFormat(inputContext.getInstrumentedSourceSection()), inputValue,
-                                                env.findMetaObject(inputContext.getInstrumentedNode().getRootNode().getLanguageInfo(), inputValue)});
-                                indent.append("  ");
-                            }
-                        };
-                    }
-
-                });
+                        });
 
         try {
             callTarget.call();
@@ -505,7 +542,7 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
             runScriptUri = RunScriptUtils.extractScriptPath(surrogateOfOpenedFile);
         } catch (InvalidCoverageScriptURI e) {
             throw DiagnosticsNotification.create(surrogateOfOpenedFile.getUri(),
-                    Diagnostic.create(Range.create(0, e.getIndex(), 0, e.getLength()), e.getReason(), DiagnosticSeverity.Error, null, "Graal LSP", null));
+                            Diagnostic.create(Range.create(0, e.getIndex(), 0, e.getLength()), e.getReason(), DiagnosticSeverity.Error, null, "Graal LSP", null));
         }
 
         if (runScriptUri == null) {
@@ -528,7 +565,7 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
 
         try {
             CallTarget callTarget = env.parse(
-                    Source.newBuilder(langId, section.getCharacters(), "eval in global scope").cached(false).build());
+                            Source.newBuilder(langId, section.getCharacters(), "eval in global scope").cached(false).build());
             Object result = callTarget.call();
             return EvaluationResult.createResult(result);
         } catch (Exception e) {
