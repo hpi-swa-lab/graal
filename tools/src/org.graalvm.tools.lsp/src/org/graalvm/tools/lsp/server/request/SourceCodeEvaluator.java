@@ -24,14 +24,63 @@
  */
 package org.graalvm.tools.lsp.server.request;
 
-import com.oracle.truffle.api.*;
+import java.io.IOException;
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.logging.Level;
+import java.util.regex.Matcher;
+
+import org.graalvm.tools.lsp.definitions.ExampleDefinition;
+import org.graalvm.tools.lsp.definitions.LanguageAgnosticFunctionArgumentDefinition;
+import org.graalvm.tools.lsp.definitions.LanguageAgnosticFunctionDeclarationDefinition;
+import org.graalvm.tools.lsp.exceptions.DiagnosticsNotification;
+import org.graalvm.tools.lsp.exceptions.EvaluationResultException;
+import org.graalvm.tools.lsp.exceptions.InvalidCoverageScriptURI;
+import org.graalvm.tools.lsp.exceptions.UnknownLanguageException;
+import org.graalvm.tools.lsp.instrument.LSPInstrument;
+import org.graalvm.tools.lsp.server.ContextAwareExecutor;
+import org.graalvm.tools.lsp.server.types.Diagnostic;
+import org.graalvm.tools.lsp.server.types.DiagnosticSeverity;
+import org.graalvm.tools.lsp.server.types.Range;
+import org.graalvm.tools.lsp.server.utils.CoverageData;
+import org.graalvm.tools.lsp.server.utils.CoverageEventNode;
+import org.graalvm.tools.lsp.server.utils.EvaluationResult;
+import org.graalvm.tools.lsp.server.utils.InteropUtils;
+import org.graalvm.tools.lsp.server.utils.RunScriptUtils;
+import org.graalvm.tools.lsp.server.utils.SourcePredicateBuilder;
+import org.graalvm.tools.lsp.server.utils.SourceUtils;
+import org.graalvm.tools.lsp.server.utils.SourceWrapper;
+import org.graalvm.tools.lsp.server.utils.TextDocumentSurrogate;
+import org.graalvm.tools.lsp.server.utils.TextDocumentSurrogateMap;
+
+import com.oracle.truffle.api.CallTarget;
+import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.Scope;
+import com.oracle.truffle.api.TruffleException;
+import com.oracle.truffle.api.TruffleLogger;
 import com.oracle.truffle.api.frame.FrameSlot;
 import com.oracle.truffle.api.frame.VirtualFrame;
-import com.oracle.truffle.api.instrumentation.*;
+import com.oracle.truffle.api.instrumentation.EventBinding;
+import com.oracle.truffle.api.instrumentation.EventContext;
+import com.oracle.truffle.api.instrumentation.ExecutionEventNode;
+import com.oracle.truffle.api.instrumentation.ExecutionEventNodeFactory;
+import com.oracle.truffle.api.instrumentation.InstrumentableNode;
+import com.oracle.truffle.api.instrumentation.SourceSectionFilter;
 import com.oracle.truffle.api.instrumentation.SourceSectionFilter.Builder;
 import com.oracle.truffle.api.instrumentation.SourceSectionFilter.IndexRange;
-import com.oracle.truffle.api.interop.*;
+import com.oracle.truffle.api.instrumentation.StandardTags;
+import com.oracle.truffle.api.instrumentation.TruffleInstrument;
+import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.interop.InvalidArrayIndexException;
+import com.oracle.truffle.api.interop.TruffleObject;
+import com.oracle.truffle.api.interop.UnknownIdentifierException;
+import com.oracle.truffle.api.interop.UnsupportedMessageException;
 import com.oracle.truffle.api.nodes.ExecutableNode;
 import com.oracle.truffle.api.nodes.LanguageInfo;
 import com.oracle.truffle.api.nodes.Node;
@@ -39,32 +88,7 @@ import com.oracle.truffle.api.nodes.NodeVisitor;
 import com.oracle.truffle.api.source.Source;
 import com.oracle.truffle.api.source.SourceSection;
 
-import jdk.nashorn.internal.runtime.Context;
-
-import org.graalvm.tools.lsp.definitions.*;
-import org.graalvm.tools.lsp.exceptions.DiagnosticsNotification;
-import org.graalvm.tools.lsp.exceptions.EvaluationResultException;
-import org.graalvm.tools.lsp.exceptions.InvalidCoverageScriptURI;
-import org.graalvm.tools.lsp.exceptions.UnknownLanguageException;
-import org.graalvm.tools.lsp.instrument.LSPInstrument;
-import org.graalvm.tools.lsp.parsing.SourceToBabylonParser;
-import org.graalvm.tools.lsp.server.ContextAwareExecutor;
-import org.graalvm.tools.lsp.server.types.Diagnostic;
-import org.graalvm.tools.lsp.server.types.DiagnosticSeverity;
-import org.graalvm.tools.lsp.server.types.Range;
-import org.graalvm.tools.lsp.server.utils.*;
-
-import java.io.IOException;
-import java.net.URI;
-import java.util.*;
-import java.util.logging.Level;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-import static org.graalvm.tools.lsp.parsing.SourceToBabylonParser.*;
-
 public final class SourceCodeEvaluator extends AbstractRequestHandler {
-    private static final String EXPRESSION_START = "expression=\"";
     private static final TruffleLogger LOG = TruffleLogger.getLogger(LSPInstrument.ID, SourceCodeEvaluator.class);
     private static final InteropLibrary INTEROP = InteropLibrary.getFactory().getUncached();
 
@@ -241,97 +265,8 @@ public final class SourceCodeEvaluator extends AbstractRequestHandler {
         List<EventBinding<?>> eventBindingList = new ArrayList<>();
 
         SourceSectionFilter sourceSectionFilter = SourceSectionFilter.newBuilder().tagIs(StandardTags.StatementTag.class, StandardTags.RootTag.class).build();
-        eventBindingList.add(env.getInstrumenter().attachExecutionEventListener(sourceSectionFilter, new ExecutionEventListener() {
-            @Override
-            public void onEnter(EventContext context, VirtualFrame frame) {
-                // Do nothing
-            }
 
-            @Override
-            public void onReturnValue(EventContext context, VirtualFrame frame, Object result) {
-                SourceSection sourceSection = context.getInstrumentedSourceSection();
-                String uri = sourceSection.getSource().getName();
-
-                if (result == null) {
-                    return;
-                }
-
-                // TODO Find a better way of enabling cross-file probing
-                if (!uri.equals(example.getUri())) {
-                    uri = example.getUri().substring(0, example.getUri().lastIndexOf("/") + 1) + uri;
-                }
-
-                /* -1 for previous line. */
-                int lineNumber = Math.max(sourceSection.getStartLine() - 1, 1);
-                String explicitProbeAnnotation = sourceSection.getSource().getCharacters(lineNumber).toString().trim();
-                boolean acceptAll = example.getProbeMode() == ExampleDefinition.ProbeMode.ALL;
-                boolean acceptDefault = example.getProbeMode() == ExampleDefinition.ProbeMode.DEFAULT;
-                if (acceptAll || (acceptDefault && explicitProbeAnnotation.contains("<Probe"))) {
-                    int line = sourceSection.getStartLine();
-                    Object probedValue = result;
-                    if (explicitProbeAnnotation.contains(EXPRESSION_START)) {
-                        int beginIndex = explicitProbeAnnotation.indexOf(EXPRESSION_START) + EXPRESSION_START.length();
-                        // Extract expression
-                        String expression = explicitProbeAnnotation.substring(beginIndex, explicitProbeAnnotation.indexOf("\" ", beginIndex));
-                        Source source = Source.newBuilder(sourceSection.getSource().getLanguage(), expression, "<probe>").build();
-                        ExecutableNode executableNode = env.parseInline(source, context.getInstrumentedNode(), frame.materialize());
-                        try {
-                            probedValue = executableNode.execute(frame);
-                        } catch (Exception e) {
-                            probedValue = e.getMessage();
-                        }
-                        line -= 1; // Probe with expression is on previous line
-                    }
-                    ProbeDefinition probe = new ProbeDefinition(line);
-                    example.getProbes().add(probe);
-                    probe.setResult(probedValue);
-                    probe.setUri(uri);
-                } else if (acceptDefault && explicitProbeAnnotation.contains("<Assertion")) {
-                    int beginIndex = explicitProbeAnnotation.indexOf("<Assertion");
-                    String assertionContent = explicitProbeAnnotation.substring(beginIndex, explicitProbeAnnotation.indexOf("/>", beginIndex));
-                    Matcher m = SourceToBabylonParser.keyValueExtractionPattern.matcher(assertionContent);
-                    Map<String, String> assertionKeyValues = new HashMap<>();
-                    while (m.find()) {
-                        assertionKeyValues.put(m.group(1), m.group(2));
-                    }
-                    if (example.getExampleName().equals(assertionKeyValues.getOrDefault("example", ""))) {
-                        int line = sourceSection.getStartLine();
-                        Object actualResult;
-                        Object expectedValue;
-                        if (assertionKeyValues.containsKey("value")) {
-                            actualResult = result;
-                            expectedValue = SourceToBabylonParser.convertExpectedValueType(assertionKeyValues.get("value"));
-                        } else if (assertionKeyValues.containsKey("expression")) {
-                            expectedValue = true;
-                            Source source = Source.newBuilder(sourceSection.getSource().getLanguage(), assertionKeyValues.get("expression"), "<assertion>").build();
-                            ExecutableNode executableNode = env.parseInline(source, context.getInstrumentedNode(), frame.materialize());
-                            try {
-                                actualResult = executableNode.execute(frame);
-                            } catch (Exception e) {
-                                // Hack: Show error as probe
-                                ProbeDefinition probe = new ProbeDefinition(line);
-                                example.getProbes().add(probe);
-                                probe.setResult(e.getMessage());
-                                probe.setUri(uri);
-                                return;
-                            }
-                            line -= 1; // Assertion with expression is on previous line
-                        } else {
-                            return; // neither value nor expression found
-                        }
-                        AssertionDefinition assertion = new AssertionDefinition(line, expectedValue);
-                        example.getAssertions().add(assertion);
-                        assertion.setResult(actualResult);
-                        assertion.setUri(uri);
-                    }
-                }
-            }
-
-            @Override
-            public void onReturnExceptional(EventContext context, VirtualFrame frame, Throwable exception) {
-                // Do nothing
-            }
-        }));
+        eventBindingList.add(env.getInstrumenter().attachExecutionEventFactory(sourceSectionFilter, new BabylonianEventNodeFactory(env, example)));
 
         Object exampleResult;
         try {
