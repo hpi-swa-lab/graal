@@ -116,8 +116,8 @@ public class BabylonianEventNode extends ExecutionEventNode {
                 example.getAssertions().add(assertion);
                 assertion.setResult(actualResult);
                 assertion.setUri(uri);
-                return true;
             }
+            return true; // found an assertion, so continue to next line
         }
         return false;
     }
