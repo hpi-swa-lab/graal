@@ -47,40 +47,50 @@ public class BabylonianEventNode extends ExecutionEventNode {
             uri = example.getUri().substring(0, example.getUri().lastIndexOf("/") + 1) + uri;
         }
 
-        /* -1 for previous line. */
-        int lineNumber = Math.max(sourceSection.getStartLine() - 1, 1);
-        String explicitProbeAnnotation = sourceSection.getSource().getCharacters(lineNumber).toString().trim();
+        /* start with previous line. */
+        int currentLineNumber = sourceSection.getStartLine() - 1;
+        while (currentLineNumber >= 1) {
+            String line = sourceSection.getSource().getCharacters(currentLineNumber).toString().trim();
+            if (!findProbeOrAssertion(frame, result, sourceSection, uri, currentLineNumber, line)) {
+                break; // stop searching for more probes and assertions
+            }
+            currentLineNumber--;
+        }
+    }
+
+    private boolean findProbeOrAssertion(VirtualFrame frame, Object result, SourceSection sourceSection, String uri, int lineIndex, String line) {
         boolean acceptAll = example.getProbeMode() == ExampleDefinition.ProbeMode.ALL;
         boolean acceptDefault = example.getProbeMode() == ExampleDefinition.ProbeMode.DEFAULT;
-        if (acceptAll || (acceptDefault && explicitProbeAnnotation.contains("<Probe"))) {
-            int line = sourceSection.getStartLine();
+        if (acceptAll || (acceptDefault && line.contains("<Probe"))) {
             Object probedValue = result;
-            if (explicitProbeAnnotation.contains(EXPRESSION_START)) {
-                int beginIndex = explicitProbeAnnotation.indexOf(EXPRESSION_START) + EXPRESSION_START.length();
+            int probeLineIndex = lineIndex;
+            if (line.contains(EXPRESSION_START)) {
+                int beginIndex = line.indexOf(EXPRESSION_START) + EXPRESSION_START.length();
                 // Extract expression
-                String expression = explicitProbeAnnotation.substring(beginIndex, explicitProbeAnnotation.indexOf("\" ", beginIndex));
+                String expression = line.substring(beginIndex, line.indexOf("\" ", beginIndex));
                 Source source = Source.newBuilder(sourceSection.getSource().getLanguage(), expression, "<probe>").build();
                 try {
                     probedValue = getInlineExecutionNode(frame, source).execute(frame);
                 } catch (Exception e) {
                     probedValue = e.getMessage();
                 }
-                line -= 1; // Probe with expression is on previous line
+            } else {
+                probeLineIndex++; // Place probe on next line
             }
-            ProbeDefinition probe = new ProbeDefinition(line);
+            ProbeDefinition probe = new ProbeDefinition(probeLineIndex);
             example.getProbes().add(probe);
             probe.setResult(probedValue);
             probe.setUri(uri);
-        } else if (acceptDefault && explicitProbeAnnotation.contains("<Assertion")) {
-            int beginIndex = explicitProbeAnnotation.indexOf("<Assertion");
-            String assertionContent = explicitProbeAnnotation.substring(beginIndex, explicitProbeAnnotation.indexOf("/>", beginIndex));
+            return true;
+        } else if (acceptDefault && line.contains("<Assertion")) {
+            int beginIndex = line.indexOf("<Assertion");
+            String assertionContent = line.substring(beginIndex, line.indexOf("/>", beginIndex));
             Matcher m = SourceToBabylonParser.keyValueExtractionPattern.matcher(assertionContent);
             Map<String, String> assertionKeyValues = new HashMap<>();
             while (m.find()) {
                 assertionKeyValues.put(m.group(1), m.group(2));
             }
             if (example.getExampleName().equals(assertionKeyValues.getOrDefault("example", ""))) {
-                int line = sourceSection.getStartLine();
                 Object actualResult;
                 Object expectedValue;
                 if (assertionKeyValues.containsKey("value")) {
@@ -93,22 +103,23 @@ public class BabylonianEventNode extends ExecutionEventNode {
                         actualResult = getInlineExecutionNode(frame, source).execute(frame);
                     } catch (Exception e) {
                         // Hack: Show error as probe
-                        ProbeDefinition probe = new ProbeDefinition(line);
+                        ProbeDefinition probe = new ProbeDefinition(lineIndex);
                         example.getProbes().add(probe);
                         probe.setResult(e.getMessage());
                         probe.setUri(uri);
-                        return;
+                        return true;
                     }
-                    line -= 1; // Assertion with expression is on previous line
                 } else {
-                    return; // neither value nor expression found
+                    return false; // neither value nor expression found
                 }
-                AssertionDefinition assertion = new AssertionDefinition(line, expectedValue);
+                AssertionDefinition assertion = new AssertionDefinition(lineIndex, expectedValue);
                 example.getAssertions().add(assertion);
                 assertion.setResult(actualResult);
                 assertion.setUri(uri);
+                return true;
             }
         }
+        return false;
     }
 
     private ExecutableNode getInlineExecutionNode(VirtualFrame frame, Source source) {
