@@ -93,9 +93,9 @@ public class BabylonianEventNode extends ExecutionEventNode {
             if (example.getExampleName().equals(assertionKeyValues.getOrDefault("example", ""))) {
                 Object actualResult;
                 Object expectedValue;
-                if (assertionKeyValues.containsKey("value")) {
+                if (assertionKeyValues.containsKey("expected")) {
                     actualResult = result;
-                    expectedValue = SourceToBabylonParser.convertExpectedValueType(assertionKeyValues.get("value"));
+                    expectedValue = SourceToBabylonParser.convertExpectedValueType(assertionKeyValues.get("expected"));
                 } else if (assertionKeyValues.containsKey("expression")) {
                     expectedValue = true;
                     Source source = Source.newBuilder(sourceSection.getSource().getLanguage(), assertionKeyValues.get("expression"), "<assertion>").build();
