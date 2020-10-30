@@ -1,3 +1,5 @@
+# Update: *The system described in [the Onward!20 paper on "Example-Based Live Programming for Everyone"](http://fniephaus.com/2020/onward20-live-programming.pdf) has evolved into [polyglot-live-programming](https://github.com/hpi-swa/polyglot-live-programming).*
+
 # GraalVM
 
 [![https://graalvm.slack.com](https://img.shields.io/badge/slack-join%20channel-active)](https://www.graalvm.org/slack-invitation/)
